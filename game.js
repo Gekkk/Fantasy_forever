@@ -860,7 +860,16 @@ function showTitle() {
 }
 function startGame(newGame) {
   if (newGame) {
-    if (loadSave() && !confirm('Start a brand new adventure? Your saved game will be replaced.')) return;
+    const btn = $('#btn-start');
+    if (loadSave() && !btn.dataset.armed) {
+      // Two-tap confirm so an existing save isn't wiped by accident.
+      btn.dataset.armed = '1';
+      btn.textContent = 'Tap again to start over (replaces save)';
+      setTimeout(() => { delete btn.dataset.armed; btn.textContent = 'Start adventure ✨'; }, 4000);
+      return;
+    }
+    delete btn.dataset.armed;
+    btn.textContent = 'Start adventure ✨';
     const name = $('#name-input').value.trim().slice(0, 12) || CONFIG.defaultName;
     state = newState(name, chosenHero);
   } else {
