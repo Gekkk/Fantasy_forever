@@ -1,2 +1,2 @@
-# Fantasy_foever
+# Fantasy_forever
 A DND inspired RPG game
