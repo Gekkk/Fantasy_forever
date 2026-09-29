@@ -297,6 +297,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif mode == Mode.MENU and event.is_action_pressed("cancel"):
 		get_viewport().set_input_as_handled()
 		close_menu()
+	elif event.is_action_pressed("confirm") and not ui.is_dialog_open():
+		# The A button / Z / E press whichever button is highlighted on any
+		# screen (results, ending, menus), not only Enter and Space.
+		var f := get_viewport().gui_get_focus_owner()
+		if f is BaseButton and f.is_visible_in_tree() and not (f as BaseButton).disabled:
+			get_viewport().set_input_as_handled()
+			(f as BaseButton).pressed.emit()
 
 
 func interact(id: String) -> void:

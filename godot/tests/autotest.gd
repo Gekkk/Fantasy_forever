@@ -94,6 +94,7 @@ func play_battle(style := "ui", screenshot_prefix := "") -> String:
 	b.finished.connect(func(r): result[0] = r)
 	var took_shot := false
 	var ring_shot := false
+	var results_shot := false
 	t = 0.0
 	while result[0] == "" and t < 240.0:
 		# Timing rings: aim for a mix of perfect and sloppy presses.
@@ -116,7 +117,8 @@ func play_battle(style := "ui", screenshot_prefix := "") -> String:
 			t += 0.05
 			continue
 		if b._results and is_instance_valid(b._results):
-			if screenshot_prefix != "":
+			if screenshot_prefix != "" and not results_shot:
+				results_shot = true
 				await shot(screenshot_prefix + "_results")
 			await _wait(0.3)
 			await press("confirm")
