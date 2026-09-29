@@ -412,10 +412,13 @@ func _run() -> void:
 			await teleport(cc.position + Vector3(0, 0, 2))
 			main.start_encounter(cc, false)
 			var b: Battle = null
-			await _wait(1.5)
-			for c in main.get_children():
-				if c is Battle:
-					b = c
+			var bt := 0.0
+			while b == null and bt < 30.0:
+				await _wait(0.2)
+				bt += 0.2
+				for c in main.get_children():
+					if c is Battle:
+						b = c
 			if b:
 				b._command_chosen.emit({"type": "guard"})
 				# Don't guard the incoming hit so we faint.
