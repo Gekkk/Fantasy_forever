@@ -423,7 +423,12 @@ func _run() -> void:
 				b._command_chosen.emit({"type": "guard"})
 				# Don't guard the incoming hit so we faint.
 				var tt := 0.0
-				while tt < 30.0 and is_instance_valid(b) and not b._over:
+				while tt < 90.0 and is_instance_valid(b) and not b._over:
+					# Stay at 1 HP (Mochi likes to heal you) and keep guarding untimed.
+					if Game.state["hp"] > 1:
+						Game.state["hp"] = 1
+					if b._cmd_panel.visible:
+						b._command_chosen.emit({"type": "guard"})
 					await _wait(0.1)
 					tt += 0.1
 			await after_battle_ok("defeat")
