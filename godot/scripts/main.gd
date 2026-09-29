@@ -287,10 +287,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if mode == Mode.EXPLORE and _cooldown <= 0.0:
 		if event.is_action_pressed("confirm"):
 			get_viewport().set_input_as_handled()
-			if not _nearest.is_empty():
-				interact(_nearest["id"])
-			else:
+			if _critter_in_front() or _nearest.is_empty():
 				_wand_swing()
+			else:
+				interact(_nearest["id"])
 		elif event.is_action_pressed("cancel"):
 			get_viewport().set_input_as_handled()
 			open_menu()

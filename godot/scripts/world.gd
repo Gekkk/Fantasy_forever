@@ -353,7 +353,7 @@ func _build_city() -> void:
 	for z in [4, 8, 12]:
 		tree(Vector3(-23, 0, z), z == 8, 1.0)
 		tree(Vector3(23, 0, z), z == 4, 1.0)
-	for p in [Vector3(-19, 0, 4.5), Vector3(-14, 0, 9.3), Vector3(-2, 0, 5.2), Vector3(11.5, 0, 5), Vector3(20, 0, 7)]:
+	for p in [Vector3(-19, 0, 4.5), Vector3(-20.5, 0, 10.5), Vector3(-2, 0, 5.2), Vector3(11.5, 0, 5), Vector3(20, 0, 7)]:
 		tree(p, randf() < 0.5)
 	for p in [Vector3(-21, 0, -9), Vector3(-9.5, 0, -10.5), Vector3(-7, 0, -13), Vector3(6.5, 0, -11), Vector3(8, 0, -13.5), Vector3(22, 0, -9)]:
 		pine(p, 1.1)
