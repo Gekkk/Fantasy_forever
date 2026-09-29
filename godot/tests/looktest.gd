@@ -1,0 +1,37 @@
+extends Node
+## Renders one gameplay view under several lighting setups (dev tool).
+
+func _ready() -> void:
+	_run.call_deferred()
+
+
+func _run() -> void:
+	var main = load("res://main.tscn").instantiate()
+	get_tree().root.add_child.call_deferred(main)
+	await get_tree().create_timer(1.0).timeout
+	main.title.visible = false
+	Game.new_game("Luna", "witch", 0, 0)
+	var map: String = OS.get_environment("LOOK_MAP") if OS.get_environment("LOOK_MAP") != "" else "city"
+	var pos := Vector3(-6, 0, -3.5) if map == "city" else Vector3(0, 0, 2)
+	await main.load_map(map, pos, false)
+	main.mode = main.Mode.EXPLORE
+	for c in main.critters:
+		c.active = false
+	main.ui.show_hud(true)
+	main.ui.refresh()
+	var variants := {
+		"a_current": {},
+	}
+	var base := {}
+	for k in ["glow_enabled", "tonemap_mode", "tonemap_exposure", "ambient_light_energy", "glow_intensity", "glow_blend_mode", "adjustment_enabled"]:
+		base[k] = main.env.get(k)
+	for name in variants:
+		for k in base:
+			main.env.set(k, base[k])
+		for k in variants[name]:
+			main.env.set(k, variants[name][k])
+		for i in 20:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("user://look_%s_%s.png" % [map, name])
+		print("LOOK ", name)
+	get_tree().quit()
