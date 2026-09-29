@@ -58,7 +58,9 @@ func drain_dialogs(max_sec := 30.0) -> void:
 			await press("confirm")
 			await _wait(0.05)
 			t += 0.05
-		elif main.mode == main.Mode.SCRIPT or main.mode == main.Mode.BATTLE:
+		elif main.mode == main.Mode.BATTLE:
+			return
+		elif main.mode == main.Mode.SCRIPT:
 			await _wait(0.1)
 			t += 0.1
 		else:
@@ -175,6 +177,10 @@ func _smart_command(b: Battle) -> void:
 
 func after_battle_ok(label: String) -> void:
 	await drain_dialogs()
+	# A roaming critter may have bumped into us meanwhile: play that battle too.
+	while main.mode == main.Mode.BATTLE:
+		print("extra battle -> ", await play_battle("ui"))
+		await drain_dialogs()
 	await wait_mode(main.Mode.EXPLORE, 10.0)
 	var leftover := false
 	for c in main.get_children():
