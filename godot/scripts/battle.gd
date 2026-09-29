@@ -10,8 +10,8 @@ signal finished(result: String) # "win" | "lose" | "flee"
 signal _command_chosen(cmd: Dictionary)
 signal _results_closed
 
-const HERO_HOME := Vector3(-2.9, 0, 1.1)
-const MOCHI_HOME := Vector3(-3.7, 0, -0.5)
+const HERO_HOME := Vector3(-3.3, 0, 1.2)
+const MOCHI_HOME := Vector3(-4.1, 0, -0.4)
 const HERO_ROT := 62.0
 const ENEMY_ROT := -58.0
 
@@ -46,8 +46,8 @@ var _round := 0
 var _guarding := false
 var _mochi_buff := 1.0
 var _over := false
-var _cam_base := Vector3(0.7, 3.4, 8.8)
-var _cam_look := Vector3(0.3, 0.9, 0)
+var _cam_base := Vector3(0.3, 3.6, 9.2)
+var _cam_look := Vector3(-0.1, 0.9, 0)
 var _t := 0.0
 var _phase2 := false
 var _selecting_target := false
@@ -118,7 +118,7 @@ func _build_arena() -> void:
 				deco.add(Art.sphere(0.09), fc[i % 4], p + Vector3(0, 0.2, 0), Vector3.ZERO, Vector3(1, 0.7, 1))
 			Art.ambient(self, Vector3(0, 1.5, -1), Vector3(7, 1.5, 4), Color("fff3a0"), 40, "soft", 0.22, 4.0)
 		"office":
-			Art.part(self, Art.box(Vector3(20, 6, 0.5)), Color("d9c9f2"), Vector3(0, 3, -6.5))
+			Art.part(self, Art.box(Vector3(20, 6, 0.5)), Color("a893d8"), Vector3(0, 3, -6.5))
 			for x in [-6.0, -2.0, 2.0, 6.0]:
 				Art.part(self, Art.box(Vector3(2.2, 2.6, 0.1)), Color("3a3f8a"), Vector3(x, 3.4, -6.2), Vector3.ZERO, Vector3.ONE, 0.8)
 			for x in [-5.5, 0.0, 5.5]:
@@ -169,18 +169,19 @@ func _build_actors() -> void:
 	hero.add_child(shield)
 
 	var n := enemy_ids.size()
-	var slots := [[Vector3(2.4, 0, 0.4)], [Vector3(1.9, 0, 1.3), Vector3(3.2, 0, -0.7)],
-		[Vector3(1.6, 0, 1.8), Vector3(2.9, 0, 0.1), Vector3(4.0, 0, -1.6)]]
+	# Spread side by side (zig-zag in depth) so name tags don't stack up.
+	var slots := [[Vector3(1.6, 0, 0.4)], [Vector3(0.6, 0, 0.9), Vector3(2.8, 0, -0.6)],
+		[Vector3(-0.3, 0, 0.8), Vector3(1.6, 0, -1.4), Vector3(3.3, 0, 0.3)]]
 	for i in n:
 		var id: String = enemy_ids[i]
 		var data: Dictionary = Game.ENEMIES[id]
 		var m := Models.critter(id)
 		var pos: Vector3 = slots[n - 1][i]
 		if id == "monday":
-			pos = Vector3(2.6, 0, -0.6)
+			pos = Vector3(1.9, 0, -0.8)
 			m.scale = Vector3.ONE * 0.95
 		else:
-			m.scale = Vector3.ONE * 1.25
+			m.scale = Vector3.ONE * (1.2 if n < 3 else 1.05)
 		m.position = pos
 		m.rotation_degrees.y = ENEMY_ROT
 		add_child(m)
@@ -265,7 +266,7 @@ func _build_ui() -> void:
 		var weak_icon := UI.icon("unknown", 26)
 		h.add_child(weak_icon)
 		v.add_child(h)
-		var hb := UI.bar(Color("ffb35c"), 170, 14)
+		var hb := UI.bar(Color("ffb35c"), 140, 14)
 		hb.max_value = e["max_hp"]
 		hb.value = e["hp"]
 		v.add_child(hb)
@@ -489,7 +490,7 @@ func _clear_menu(title: String) -> void:
 func _menu_button(text: String, cb: Callable, enabled := true, icon_name := "") -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(300, 58)
+	b.custom_minimum_size = Vector2(280, 52)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.add_theme_font_size_override("font_size", 27)
 	b.disabled = not enabled

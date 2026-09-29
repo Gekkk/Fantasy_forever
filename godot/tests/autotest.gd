@@ -101,7 +101,7 @@ func play_battle(style := "ui", screenshot_prefix := "") -> String:
 	var ring_shot := false
 	var results_shot := false
 	t = 0.0
-	while result[0] == "" and t < 240.0:
+	while result[0] == "" and t < 240.0 and is_instance_valid(b):
 		# Timing rings: aim for a mix of perfect and sloppy presses.
 		var ring: TimingRing = null
 		for c in b.ui.get_children():
@@ -183,6 +183,11 @@ func _smart_command(b: Battle) -> void:
 
 
 func after_battle_ok(label: String) -> void:
+	# Let the finished battle fade out and tear down first.
+	var wt := 0.0
+	while main.mode == main.Mode.BATTLE and wt < 20.0:
+		await _wait(0.1)
+		wt += 0.1
 	await drain_dialogs()
 	# A roaming critter may have bumped into us meanwhile: play that battle too.
 	while main.mode == main.Mode.BATTLE:
@@ -199,9 +204,10 @@ func after_battle_ok(label: String) -> void:
 	await _wait(0.3)
 	# Movement must work after the battle (the old game froze here).
 	var before: Vector3 = main.player.position
-	Input.action_press("move_left")
+	var dir := "move_left" if before.x > 0 else "move_right"
+	Input.action_press(dir)
 	await _wait(0.4)
-	Input.action_release("move_left")
+	Input.action_release(dir)
 	await _wait(0.2)
 	check(main.player.position.distance_to(before) > 0.3, label + ": player can move after battle")
 
