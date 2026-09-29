@@ -36,7 +36,7 @@ func set_q(v: int) -> void:
 
 func marker_ids() -> Array:
 	match q():
-		0: return ["cafe"]
+		0: return ["cafe", "bree"]
 		1: return ["tower_door"]
 		2: return ["badge"] if Game.flag("frost") else ["merlo", "badge"]
 		3: return ["tower_door", "dot"]
@@ -62,8 +62,25 @@ func interact(id: String) -> void:
 		await _shard(id.substr(6))
 		return
 	match id:
-		"home": await _home()
-		"cafe": await _cafe()
+		"home": await _enter("home_in")
+		"cafe": await _enter("cafe_in")
+		"library": await _enter("library_in")
+		"boutique": await _enter("boutique_in")
+		"exit_home": await _leave("home")
+		"exit_cafe": await _leave("cafe")
+		"exit_library": await _leave("library")
+		"exit_boutique": await _leave("boutique")
+		"bed": await _home()
+		"photo": await say("", "Framed photos of you and your favorite person, all over the mantel. You smile every time you see them.", C_SYS)
+		"bree": await _cafe()
+		"gus": await _gus()
+		"nyx": await _nyx()
+		"hoot": await _hoot()
+		"velour": await _velour()
+		"mirror": await _mirror()
+		"thistle": await _thistle()
+		"gardener": await _poppy()
+		"vending": await _vending()
 		"tower_door": await _tower_door()
 		"exit": await m.load_map("city", Vector3(15, 0, -6.9))
 		"stairs": await _stairs()
@@ -98,8 +115,21 @@ func _home() -> void:
 	await say("Home", "Zzz... You wake up fresh as a daisy! (Game saved)", C_SYS)
 
 
-func _cafe() -> void:
+const DOOR_SPAWNS := {"home": Vector3(-15, 0, -6.8), "cafe": Vector3(0, 0, -6.8),
+	"library": Vector3(-32, 0, -6.8), "boutique": Vector3(31, 0, -6.8)}
+
+
+func _enter(map_id: String) -> void:
 	Audio.sfx("door")
+	await m.load_map(map_id, Vector3(0, 0, 3.0))
+
+
+func _leave(building: String) -> void:
+	Audio.sfx("door")
+	await m.load_map("city", DOOR_SPAWNS[building])
+
+
+func _cafe() -> void:
 	if q() == 0:
 		await say("Bree", "Welcome to the Bubbling Cauldron! Ooh, a new face!", C_BREE)
 		await say("Bree", "First day at Spellwork Tower? Then this Moonbeam Latte is on the house!", C_BREE)
@@ -401,3 +431,86 @@ func _boss() -> void:
 		await Game.get_tree().create_timer(0.35).timeout
 	Game.save_game()
 	await m.ui.show_ending()
+
+
+# ============================================================ new friends
+func _gus() -> void:
+	await say("Gus the Gnome", ["I've been coming here for 300 years. The muffins used to cost one acorn.",
+		"Psst. If you're low on MP, Moon Tea is the secret. Bree brews it under a full moon.",
+		"My beard? Enchanted. It keeps my coffee warm."].pick_random(), Color("e05a5a"))
+
+
+func _nyx() -> void:
+	await say("Nyx", ["I'm a bat, so technically this is my breakfast. It's 7 p.m. for me.",
+		"Have you tried the Wishing Tree past the stream? Everyone says it grants cozy wishes.",
+		"I work night shift at the Library. Professor Hoot knows EVERYTHING. Ask him about spells."].pick_random(), Color("8f6ee8"))
+
+
+func _hoot() -> void:
+	if not Game.flag("heal"):
+		await say("Professor Hoot", "Hoo! A young wizard in my library! Welcome, welcome. Mind the floating books, they bite. Gently.", Color("c9906a"))
+		await say("Professor Hoot", "Every wizard should know how to take care of themselves. Here, let me teach you HEAL GLOW.", Color("c9906a"))
+		Game.learn("heal")
+		Game.set_flag("heal")
+		Audio.sfx("heal")
+		m.ui.toast("Learned Heal Glow!", "hp")
+		await say("Professor Hoot", "Time your casting when the ring meets the circle, and it heals even more. Hoo hoo!", Color("c9906a"))
+		return
+	await say("Professor Hoot", ["The Monday Monster was once a humble alarm clock. Grumpiness is a powerful magic, you know.",
+		"Legend says five Star Shards together teach the Starfall spell. One is hiding in this very library!",
+		"Fire melts paper and clouds, Ice chills bugs and birds, Sparkle soothes machines. Write that down!"].pick_random(), Color("c9906a"))
+
+
+func _velour() -> void:
+	await say("Madame Velour", "Bienvenue, darling! Every hero deserves a signature look.", Color("e05aa8"))
+	await say("Madame Velour", "Step up to the magic mirror and try anything you like. First fitting is free. So are all the others.", Color("e05aa8"))
+
+
+func _mirror() -> void:
+	var style_names := ["Witch", "Fairy", "Elf", "Keep my style"]
+	var c := await ask("Magic Mirror", "Mirror, mirror... which look today?", style_names, Color("ffd36b"), 3)
+	if c < 3:
+		Game.state["style"] = Game.STYLES[c]
+	var robes := ["Lavender", "Rose", "Mint", "Sky", "Peach", "Pearl"]
+	var r := await ask("Magic Mirror", "And your robe color?", robes, Color("ffd36b"), int(Game.state["robe"]))
+	Game.state["robe"] = r
+	var hairs := ["Cocoa", "Honey", "Bubblegum", "Midnight", "Frost"]
+	var h := await ask("Magic Mirror", "And your hair?", hairs, Color("ffd36b"), int(Game.state["hair"]))
+	Game.state["hair"] = h
+	Audio.sfx("sparkle")
+	m.player.rebuild_model()
+	Art.burst(m.world, m.player.position + Vector3(0, 1, 0), Color("ffd3e6"), 30, "sparkle", 3.0, 1.0, 0.35)
+	await say("Madame Velour", "Magnifique! You look absolutely enchanting.", Color("e05aa8"))
+
+
+func _thistle() -> void:
+	if not Game.flag("thistle_gift"):
+		await say("Nana Thistle", "Oh, hello dearie. I'm knitting a scarf for the Wishing Tree. It gets chilly at night.", Color("c38bff"))
+		await say("Nana Thistle", "You look like you work too hard. Take some of my Moon Tea, I always brew too much.", Color("c38bff"))
+		Game.add_item("tea", 2)
+		Game.set_flag("thistle_gift")
+		Audio.sfx("coin")
+		m.ui.toast("Got 2 Moon Teas", "tea")
+		return
+	await say("Nana Thistle", ["Knit one, purl two... sparkle three.", "Back in my day, critters were grumpy on Tuesdays too.",
+		"Visit the Wishing Tree past the stream, dearie. It likes company."].pick_random(), Color("c38bff"))
+
+
+func _poppy() -> void:
+	await say("Poppy", ["I'm the head gardener! The hedge garden took me three hundred naps to grow.",
+		"The flowers glow at night if you sing to them. Off-key is fine!",
+		"Grumpy critters love flower beds. Swing your wand at them first for a First Strike!"].pick_random(), Color("7cc97a"))
+
+
+func _vending() -> void:
+	var coins: int = Game.state["coins"]
+	var c := await ask("Potion Machine", "BLOOP. One Moon Tea: 6 coins. (You have %d coins)" % coins, ["Buy one", "No thanks"], Color("ff8fb8"), 1)
+	if c != 0:
+		return
+	if coins < 6:
+		await say("Potion Machine", "BLOOP BLOOP. Insufficient sparkle funds.", Color("ff8fb8"))
+		return
+	Game.add_coins(-6)
+	Game.add_item("tea")
+	Audio.sfx("coin")
+	await say("Potion Machine", "*clunk* A warm Moon Tea rolls out. It smells like stars.", Color("ff8fb8"))

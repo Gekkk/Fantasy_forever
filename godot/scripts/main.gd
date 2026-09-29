@@ -4,7 +4,8 @@ extends Node
 enum Mode { TITLE, EXPLORE, SCRIPT, BATTLE, MENU }
 
 const CAM_OFFSET := Vector3(0, 11.0, 11.5)
-const MUSIC := {"city": "town", "tower": "tower", "roof": "tower"}
+const MUSIC := {"city": "town", "tower": "tower", "roof": "tower", "home_in": "ending",
+	"cafe_in": "town", "library_in": "ending", "boutique_in": "town"}
 
 var mode := Mode.TITLE
 var env: Environment
@@ -213,7 +214,7 @@ func refresh_markers() -> void:
 func _snap_camera() -> void:
 	cam.current = true
 	var t := _cam_target()
-	cam.position = t + CAM_OFFSET
+	cam.position = t + CAM_OFFSET * world.cam_zoom
 	cam.look_at(t + Vector3(0, 0.6, 0))
 
 
@@ -236,8 +237,8 @@ func _process(delta: float) -> void:
 	_cooldown = maxf(0.0, _cooldown - delta)
 	_swing_cd = maxf(0.0, _swing_cd - delta)
 	var t := _cam_target()
-	cam.position = cam.position.lerp(t + CAM_OFFSET, minf(1.0, 5.0 * delta))
-	cam.look_at(cam.position - CAM_OFFSET + Vector3(0, 0.6, 0))
+	cam.position = cam.position.lerp(t + CAM_OFFSET * world.cam_zoom, minf(1.0, 5.0 * delta))
+	cam.look_at(cam.position - CAM_OFFSET * world.cam_zoom + Vector3(0, 0.6, 0))
 	_update_follower(delta)
 	player.can_move = mode == Mode.EXPLORE
 	if mode != Mode.EXPLORE:
@@ -426,11 +427,11 @@ func battle(ids: Array, area: String, strike := false) -> String:
 	mode = Mode.SCRIPT
 	if result == "lose":
 		Game.full_heal()
-		var home: Vector3 = Vector3(-15, 0, -6.5)
-		if world.map_id != "city":
-			await load_map("city", home, false)
+		var bedside := Vector3(-2.2, 0, -1.2)
+		if world.map_id != "home_in":
+			await load_map("home_in", bedside, false)
 		else:
-			player.position = home
+			player.position = bedside
 		_snap_camera()
 		Audio.play_music(MUSIC.get(world.map_id, "town"), 0.5)
 		await ui.fade_in(0.5)

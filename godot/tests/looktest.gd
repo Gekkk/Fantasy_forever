@@ -12,7 +12,10 @@ func _run() -> void:
 	main.title.visible = false
 	Game.new_game("Luna", "witch", 0, 0)
 	var map: String = OS.get_environment("LOOK_MAP") if OS.get_environment("LOOK_MAP") != "" else "city"
-	var pos := Vector3(-6, 0, -3.5) if map == "city" else Vector3(0, 0, 2)
+	var pos := Vector3(-6, 0, -3.5) if map == "city" else Vector3(0, 0, 1.5)
+	if OS.get_environment("LOOK_POS") != "":
+		var pp := OS.get_environment("LOOK_POS").split(",")
+		pos = Vector3(float(pp[0]), 0, float(pp[1]))
 	await main.load_map(map, pos, false)
 	main.mode = main.Mode.EXPLORE
 	for c in main.critters:

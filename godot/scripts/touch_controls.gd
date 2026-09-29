@@ -16,14 +16,24 @@ var _b: Button
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_a = _round_button("A", Color("ff7eb6"), 132)
-	_a.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	_a.position = Vector2(-170, -180)
+	_a = _round_button("A", Color("ff7eb6"), 140)
+	_place(_a, Vector2(-190, -200))
 	_a.button_down.connect(_send.bind("confirm"))
-	_b = _round_button("B", Color("9d86e8"), 96)
-	_b.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	_b.position = Vector2(-290, -120)
+	_b = _round_button("B", Color("9d86e8"), 100)
+	_place(_b, Vector2(-270, -330))
 	_b.button_down.connect(_send.bind("cancel"))
+
+
+## Pins a button to the bottom-right corner at the given offset.
+func _place(b: Button, offset: Vector2) -> void:
+	b.anchor_left = 1.0
+	b.anchor_right = 1.0
+	b.anchor_top = 1.0
+	b.anchor_bottom = 1.0
+	b.offset_left = offset.x
+	b.offset_top = offset.y
+	b.offset_right = offset.x + b.custom_minimum_size.x
+	b.offset_bottom = offset.y + b.custom_minimum_size.y
 
 
 func _round_button(text: String, color: Color, size: float) -> Button:

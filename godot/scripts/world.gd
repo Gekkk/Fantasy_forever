@@ -40,6 +40,7 @@ var critter_spawns: Array = [] # {id, pos, area, uid}
 var spawns := {}
 var cam_min := Vector2(-10, -10)
 var cam_max := Vector2(10, 10)
+var cam_zoom := 1.0 # scales the camera distance (interiors sit closer)
 var env := {}
 var markers := {} # interactable id -> Label3D "!"
 
@@ -56,6 +57,10 @@ func build(id: String) -> void:
 		"city": _build_city()
 		"tower": _build_tower()
 		"roof": _build_roof()
+		"home_in": _build_home_in()
+		"cafe_in": _build_cafe_in()
+		"library_in": _build_library_in()
+		"boutique_in": _build_boutique_in()
 	batch.flush(self)
 
 
@@ -253,38 +258,48 @@ func _build_city() -> void:
 	env = {
 		"top": Vector3(0.14, 0.11, 0.36), "mid": Vector3(0.5, 0.33, 0.66), "horizon": Vector3(1.0, 0.68, 0.66),
 		"ambient": Color("c7b3f0"), "ambient_energy": 0.32, "sun_color": Color("ffd9c2"), "sun_energy": 0.8,
-		"sun_rot": Vector3(-42, -35, 0), "fog": Color("d9b8e8"), "fog_density": 0.006,
+		"sun_rot": Vector3(-42, -35, 0), "fog": Color("d9b8e8"), "fog_density": 0.005,
 	}
-	cam_min = Vector2(-15, -9.5)
-	cam_max = Vector2(15, 11)
-	spawns = {"start": Vector3(-15, 0, -6.5), "home": Vector3(-15, 0, -7.2), "tower": Vector3(15, 0, -6.9),
-		"cafe": Vector3(0, 0, -7.2)}
+	cam_min = Vector2(-32, -9.5)
+	cam_max = Vector2(32, 24)
+	spawns = {"start": Vector3(-15, 0, -6.5), "home": Vector3(-15, 0, -6.8), "tower": Vector3(15, 0, -6.9),
+		"cafe": Vector3(0, 0, -6.8), "library": Vector3(-32, 0, -6.8), "boutique": Vector3(31, 0, -6.8)}
 
-	ground_plane(Vector2(140, 120), Art.ground_mat(Color("86cf78"), Color("68b86a")), 0.0)
+	ground_plane(Vector2(220, 180), Art.ground_mat(Color("86cf78"), Color("68b86a")), 0.0)
 	var plaza := Art.ground_mat(Color("dcb9d6"), Color("cfaacb"), 1, 1.2, Color("a98aa8"))
-	slab(Vector3(54, 0.04, 3.8), Vector3(0, 0.02, -6.2), plaza)
-	slab(Vector3(54, 0.04, 1.6), Vector3(0, 0.02, 0.6), plaza)
+	slab(Vector3(86, 0.04, 3.8), Vector3(0, 0.02, -6.2), plaza)
+	slab(Vector3(86, 0.04, 1.6), Vector3(0, 0.02, 0.6), plaza)
 	var road := Art.ground_mat(Color("857daa"), Color("766e9c"), 1, 0.9, Color("5b5480"))
-	slab(Vector3(54, 0.045, 4.2), Vector3(0, 0.022, -2.3), road)
-	for x in range(-24, 25, 3):
-		if abs(x + 9) > 2 and abs(x - 9) > 2:
+	slab(Vector3(86, 0.045, 4.2), Vector3(0, 0.022, -2.3), road)
+	var crossings := [-24, -9, 9, 24]
+	for x in range(-42, 43, 3):
+		var near := false
+		for cx in crossings:
+			if abs(x - cx) <= 2:
+				near = true
+		if not near:
 			batch.add(Art.box(Vector3(1.4, 0.02, 0.18)), Color("ffe08a"), Vector3(x, 0.05, -2.3))
-	for cx in [-9, 9]:
+	for cx in crossings:
 		for i in 6:
 			batch.add(Art.box(Vector3(0.35, 0.02, 3.6)), Color("fbf7ff"), Vector3(cx - 1.5 + i * 0.6, 0.05, -2.3))
 	var dirt := Art.ground_mat(Color("e0bf8c"), Color("d2ad78"), 0)
-	slab(Vector3(2.2, 0.03, 11), Vector3(-9, 0.015, 7.2), dirt)
-	slab(Vector3(26, 0.03, 2.0), Vector3(1.5, 0.015, 12.3), dirt)
-	slab(Vector3(2.0, 0.03, 11), Vector3(14.5, 0.015, 7.2), dirt)
+	slab(Vector3(2.2, 0.03, 19), Vector3(-9, 0.015, 11.0), dirt)
+	slab(Vector3(2.0, 0.03, 19), Vector3(14.5, 0.015, 11.0), dirt)
+	slab(Vector3(2.0, 0.03, 13), Vector3(-24, 0.015, 8.0), dirt)
+	slab(Vector3(2.0, 0.03, 13), Vector3(24, 0.015, 8.0), dirt)
+	slab(Vector3(50, 0.03, 2.0), Vector3(0, 0.015, 14.5), dirt)
+	slab(Vector3(2.0, 0.03, 8), Vector3(1, 0.015, 25), dirt)
 
+	_build_library(Vector3(-32, 0, -12))
 	_build_home(Vector3(-15, 0, -11))
 	_build_cafe(Vector3(0, 0, -11.5))
 	_build_spellwork(Vector3(15, 0, -13))
+	_build_boutique(Vector3(31, 0, -11))
 
 	# Street furniture
-	for x in [-20, -10, 0, 10, 20]:
-		lamp(Vector3(x + 2.5, 0, -4.6), x % 20 == 0)
-	for x in [-18, -4, 5, 19]:
+	for x in [-36, -28, -20, -10, 0, 10, 20, 28, 36]:
+		lamp(Vector3(x + 2.5, 0, -4.6), x == -20 or x == 0 or x == 20)
+	for x in [-34, -18, -4, 5, 19, 34]:
 		lamp(Vector3(x, 0, 1.3), false, Color("ffc2e0"))
 	var mailbox := Art.node(self, "Mailbox", Vector3(-6, 0, -5.6))
 	Art.part(mailbox, Art.cyl(0.06, 0.06, 1.0), Color("5a4a7a"), Vector3(0, 0.5, 0))
@@ -293,31 +308,24 @@ func _build_city() -> void:
 	Art.collider_round(self, 0.3, 1.5, Vector3(-6, 0, -5.6))
 	sign_board(Vector3(11.5, 1.9, 1.3), "Sky-Tram Stop", Color("e0f0ff"), 30)
 	batch.add(Art.cyl(0.05, 0.05, 1.7), Color("5a4a7a"), Vector3(11.5, 0.85, 1.25))
-	# Potion vending machine (very modern, very magical)
-	var vend := Art.node(self, "Vending", Vector3(-22, 0, -6))
+	var vend := Art.node(self, "Vending", Vector3(-22.5, 0, -6.6))
 	Art.part(vend, Art.box(Vector3(1.3, 2.2, 0.9)), Color("ff8fb8"), Vector3(0, 1.1, 0))
 	Art.part(vend, Art.box(Vector3(0.9, 1.3, 0.1)), Color("bfe8ff"), Vector3(0, 1.3, 0.45), Vector3.ZERO, Vector3.ONE, 0.6)
 	for i in 6:
 		Art.part(vend, Art.sphere(0.08), [Color("ff6b8a"), Color("7cff9a"), Color("7cc8ff")][i % 3], Vector3(-0.25 + (i % 3) * 0.25, 1.05 + int(i / 3) * 0.45, 0.5), Vector3.ZERO, Vector3.ONE, 2.0, false)
-	Art.collider(self, Vector3(1.3, 2, 0.9), Vector3(-22, 1, -6))
+	Art.collider(self, Vector3(1.3, 2, 0.9), Vector3(-22.5, 1, -6.6))
+	add_interactable("vending", Vector3(-22.5, 0, -5.6), 1.4, "Use the Potion Machine")
 
-	# Sky-tram: a little flying bus with a balloon
-	_tram = Art.node(self, "Tram", Vector3(-30, 7.5, -2.3))
+	_tram = Art.node(self, "Tram", Vector3(-40, 7.5, -2.3))
 	Art.part(_tram, Art.capsule(0.9, 3.6), Color("ffd36b"), Vector3.ZERO, Vector3(0, 0, 90))
 	Art.part(_tram, Art.capsule(0.95, 2.4), Color("ff8fb8"), Vector3(0, 1.4, 0), Vector3(0, 0, 90))
 	for i in 4:
 		Art.part(_tram, Art.box(Vector3(0.5, 0.45, 0.1)), Color("fff3b0"), Vector3(-1.1 + i * 0.7, 0.1, 0.85), Vector3.ZERO, Vector3.ONE, 1.5, false)
 	Art.ambient(_tram, Vector3(-2, 0, 0), Vector3(0.3, 0.3, 0.3), Color("ffe8a0"), 12, "sparkle", 0.3, 1.0, Vector3(-1, 0, 0))
 
-	# Petal Park
+	# ---- Petal Park ----
 	var pond_c := Vector3(6, 0, 8.5)
-	var water := MeshInstance3D.new()
-	water.mesh = Art.cyl(3.0, 3.0, 0.06, 40)
-	var wm := ShaderMaterial.new()
-	wm.shader = Art.shader("water")
-	water.material_override = wm
-	water.position = pond_c + Vector3(0, 0.05, 0)
-	add_child(water)
+	_water_disc(pond_c, 3.0)
 	Art.part(self, Art.torus(2.9, 3.4), Color("d8cfe8"), pond_c + Vector3(0, 0.05, 0), Vector3.ZERO, Vector3(1, 1.6, 1))
 	var fountain := Art.node(self, "Fountain", pond_c)
 	Art.part(fountain, Art.cyl(0.7, 0.9, 0.5), Color("e8e0f5"), Vector3(0, 0.25, 0))
@@ -330,56 +338,64 @@ func _build_city() -> void:
 	spray.spread = 25
 	Art.collider_round(self, 3.3, 1.0, pond_c)
 	batch.add(Art.sphere(0.6), Color("b8aed0"), pond_c + Vector3(2.2, 0.1, 1.6), Vector3.ZERO, Vector3(1.2, 0.5, 1))
-	# Lily pads
 	for a in [0.5, 2.3, 4.0]:
 		batch.add(Art.cyl(0.35, 0.35, 0.02), Color("6cc978"), pond_c + Vector3(cos(a) * 2.0, 0.1, sin(a) * 2.0))
 		batch.add(Art.sphere(0.08), Color("ffc2e0"), pond_c + Vector3(cos(a) * 2.0, 0.16, sin(a) * 2.0))
 
-	flower_bed(Vector3(-16, 0, 6.5), Vector2(6, 3), 70)
-	flower_bed(Vector3(-4, 0, 7.5), Vector2(5, 3), 55)
-	flower_bed(Vector3(-15, 0, 10.5), Vector2(4, 2), 35)
-	flower_bed(Vector3(19, 0, 6), Vector2(3, 4), 40)
-	flower_bed(Vector3(0, 0, 3.5), Vector2(10, 0.8), 45)
-	grass_tufts(Vector3(0, 0, 8), Vector2(44, 12), 220)
+	_gazebo(Vector3(-30, 0, 12))
+	_hedge_garden(Vector3(29, 0, 11))
+	_stream(21.0)
+	_wishing_tree(Vector3(1, 0, 23.8))
+
+	for fb in [[Vector3(-16, 0, 6.5), Vector2(6, 3), 70], [Vector3(-4, 0, 7.5), Vector2(5, 3), 55],
+			[Vector3(-15, 0, 10.5), Vector2(4, 2), 35], [Vector3(19, 0, 6), Vector2(3, 4), 40],
+			[Vector3(0, 0, 3.5), Vector2(10, 0.8), 45], [Vector3(-36, 0, 6), Vector2(4, 3), 45],
+			[Vector3(-20, 0, 18), Vector2(8, 2), 60], [Vector3(10, 0, 18), Vector2(8, 2), 60],
+			[Vector3(-18, 0, 26), Vector2(10, 3), 70], [Vector3(20, 0, 26), Vector2(10, 3), 70]]:
+		flower_bed(fb[0], fb[1], fb[2])
+	grass_tufts(Vector3(0, 0, 11), Vector2(80, 16), 380)
+	grass_tufts(Vector3(0, 0, 26), Vector2(80, 5), 160)
 	bench(Vector3(-12, 0, 5.3), 180)
 	bench(Vector3(-5.5, 0, 10.5), 0)
 	bench(Vector3(18, 0, 11), -90)
+	bench(Vector3(-3, 0, 17), 0)
 	lamp(Vector3(-9, 0, 4.5), true, Color("ffc2e0"))
 	lamp(Vector3(12, 0, 12), false, Color("ffc2e0"))
-	Art.ambient(self, Vector3(0, 1.2, 9), Vector3(20, 1.0, 5), Color("fff3a0"), 60, "soft", 0.22, 5.0)
+	lamp(Vector3(-24, 0, 15), false, Color("ffc2e0"))
+	lamp(Vector3(24, 0, 15), true, Color("ffc2e0"))
+	Art.ambient(self, Vector3(0, 1.2, 11), Vector3(36, 1.0, 8), Color("fff3a0"), 90, "soft", 0.22, 5.0)
+	Art.ambient(self, Vector3(0, 1.2, 26), Vector3(36, 1.0, 3), Color("fff3a0"), 40, "soft", 0.22, 5.0)
 
-	# Trees around the edges and in the park
-	# Low hedge along the south edge so nothing blocks the camera.
-	for i in 30:
-		bush(Vector3(-23 + i * 1.6, 0, 15.2), 0.8, i % 3 == 0)
-	for z in [4, 8, 12]:
-		tree(Vector3(-23, 0, z), z == 8, 1.0)
-		tree(Vector3(23, 0, z), z == 4, 1.0)
-	for p in [Vector3(-19, 0, 4.5), Vector3(-20.5, 0, 10.5), Vector3(-2, 0, 5.2), Vector3(11.5, 0, 5), Vector3(20, 0, 7)]:
+	# Edges: low hedges in front of the camera, trees at the far sides.
+	for i in 52:
+		bush(Vector3(-41 + i * 1.6, 0, 29.6), 0.8, i % 3 == 0)
+	for z in [4, 8, 12, 16]:
+		tree(Vector3(-40.5, 0, z), z == 8 or z == 24, 1.0)
+		tree(Vector3(40.5, 0, z), z == 4 or z == 16, 1.0)
+	for p in [Vector3(-19, 0, 4.5), Vector3(-36, 0, 17), Vector3(-2, 0, 5.2), Vector3(11.5, 0, 5), Vector3(20, 0, 7),
+			Vector3(35, 0, 5), Vector3(-26, 0, 5), Vector3(36, 0, 18)]:
 		tree(p, randf() < 0.5)
-	for p in [Vector3(-21, 0, -9), Vector3(-9.5, 0, -10.5), Vector3(-7, 0, -13), Vector3(6.5, 0, -11), Vector3(8, 0, -13.5), Vector3(22, 0, -9)]:
+	for p in [Vector3(-40, 0, -9), Vector3(-24.5, 0, -12), Vector3(-9.5, 0, -10.5), Vector3(-7, 0, -13), Vector3(6.5, 0, -11),
+			Vector3(8, 0, -13.5), Vector3(22.5, 0, -12), Vector3(40, 0, -9)]:
 		pine(p, 1.1)
-	for p in [Vector3(-18.3, 0, -8.3), Vector3(-11.7, 0, -8.3), Vector3(-4, 0, -8.2), Vector3(4, 0, -8.2), Vector3(-21.5, 0, 2), Vector3(21.5, 0, 2)]:
+	for p in [Vector3(-18.3, 0, -8.3), Vector3(-11.7, 0, -8.3), Vector3(-4, 0, -8.2), Vector3(4, 0, -8.2),
+			Vector3(-41, 0, 2), Vector3(41, 0, 2), Vector3(-35.5, 0, -8.3), Vector3(-28.5, 0, -8.3),
+			Vector3(27.5, 0, -8.3), Vector3(34.5, 0, -8.3)]:
 		bush(p)
 
-	# Distant floating islands and hills for that fantasy skyline
-	for data in [[Vector3(-30, 14, -55), 5.0], [Vector3(10, 18, -70), 7.0], [Vector3(38, 11, -50), 4.0], [Vector3(-55, 20, -80), 8.0]]:
+	for data in [[Vector3(-40, 14, -55), 5.0], [Vector3(10, 18, -70), 7.0], [Vector3(45, 11, -50), 4.0], [Vector3(-65, 20, -80), 8.0], [Vector3(60, 22, -85), 6.0]]:
 		_island(data[0], data[1])
-	for i in 7:
-		batch.add(Art.sphere(12.0, true), Color("8a7bc0").lerp(Color("b49ad8"), i / 7.0), Vector3(-70 + i * 24, -1, -85 - (i % 2) * 10), Vector3.ZERO, Vector3(1.3, 0.8, 1))
+	for i in 9:
+		batch.add(Art.sphere(12.0, true), Color("8a7bc0").lerp(Color("b49ad8"), i / 9.0), Vector3(-96 + i * 24, -1, -85 - (i % 2) * 10), Vector3.ZERO, Vector3(1.3, 0.8, 1))
 
-	# Boundaries
-	invisible_wall(Vector3(60, 4, 1), Vector3(0, 2, -15.5))
-	invisible_wall(Vector3(60, 4, 1), Vector3(0, 2, 15.2))
-	invisible_wall(Vector3(1, 4, 40), Vector3(-24, 2, 0))
-	invisible_wall(Vector3(1, 4, 40), Vector3(24, 2, 0))
+	invisible_wall(Vector3(90, 4, 1), Vector3(0, 2, -15.5))
+	invisible_wall(Vector3(90, 4, 1), Vector3(0, 2, 30.0))
+	invisible_wall(Vector3(1, 4, 50), Vector3(-42, 2, 7))
+	invisible_wall(Vector3(1, 4, 50), Vector3(42, 2, 7))
 
-	# Shards
-	shard("s1", Vector3(-21.5, 0, -12.5))
-	shard("s2", Vector3(10.5, 0, 12.8))
-	shard("s3", Vector3(22, 0, -2.3))
+	shard("s1", Vector3(-23.5, 0, -12.8))
+	shard("s2", Vector3(3.4, 0, 26.6))
 
-	# People of Moonbrook
 	add_npc("pip", Models.owl(), Vector3(-7.2, 0, -5.2), 20, "Talk to Pip")
 	add_npc("sparkle", Models.unicorn(), Vector3(9.8, 0, 0.9), 150, "Talk to Sparkle", 2.0)
 	add_npc("reginald", Models.humanoid({"robe": Color("9aa3b8"), "hat": "helmet", "hair_style": "none",
@@ -389,20 +405,174 @@ func _build_city() -> void:
 	var marina := Models.humanoid({"robe": Color("5fd6c9"), "hair": Color("ff9fc4"), "hair_style": "long",
 		"extras": ["tail_fin"], "accent": Color("c3a6ff")})
 	add_npc("marina", marina, pond_c + Vector3(2.2, 0.35, 1.6), -30, "Talk to Marina", 2.8)
+	add_npc("thistle", Models.humanoid({"robe": Color("c38bff"), "hair": Color("e8e8f0"), "hat": "witch",
+		"hair_style": "bun", "extras": ["glasses"], "accent": Color("7cd6b8"), "scale": 0.9}), Vector3(-30, 0, 16.0), 0, "Talk to Nana Thistle")
+	add_npc("gardener", Models.humanoid({"robe": Color("7cc97a"), "hair": Color("c9703a"), "hair_style": "pigtails",
+		"extras": ["apron", "ears"], "accent": Color("ffd36b")}), Vector3(29, 0, 7.4), 200, "Talk to Poppy")
 
 	add_interactable("home", Vector3(-15, 0, -8.2), 1.6, "Enter Home")
 	add_interactable("cafe", Vector3(0, 0, -8.1), 1.6, "Enter the Bubbling Cauldron")
+	add_interactable("library", Vector3(-32, 0, -8.2), 1.7, "Enter the Moonlight Library")
+	add_interactable("boutique", Vector3(31, 0, -8.2), 1.7, "Enter Velour's Boutique")
 	add_interactable("tower_door", Vector3(15, 0, -9.1), 1.4, "", true)
 	if Game.state["quest"] == 2:
 		spawn_badge(Vector3(-18, 0, 12))
 
 	critter_spawns = []
-	var west := Rect2(-21, 3.8, 16, 10)
-	var east := Rect2(10.5, 3.8, 10.5, 10)
+	var west := Rect2(-38, 4, 28, 12.5)
+	var east := Rect2(10.5, 4, 27, 12.5)
+	var meadow := Rect2(-36, 23, 72, 5)
+	for i in 4:
+		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-36, -12), 0, randf_range(5, 15)), "area": west})
 	for i in 3:
-		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-20, -6), 0, randf_range(5, 13)), "area": west})
-	for i in 2:
-		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(12, 20), 0, randf_range(5, 13)), "area": east})
+		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(12, 36), 0, randf_range(5, 15)), "area": east})
+	for i in 3:
+		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-34, 34), 0, randf_range(23.5, 27.5)), "area": meadow})
+
+
+func _water_disc(c: Vector3, r: float) -> void:
+	var water := MeshInstance3D.new()
+	water.mesh = Art.cyl(r, r, 0.06, 40)
+	var wm := ShaderMaterial.new()
+	wm.shader = Art.shader("water")
+	water.material_override = wm
+	water.position = c + Vector3(0, 0.05, 0)
+	add_child(water)
+
+
+func _stream(z: float) -> void:
+	var water := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(90, 0.06, 2.6)
+	water.mesh = bm
+	var wm := ShaderMaterial.new()
+	wm.shader = Art.shader("water")
+	water.material_override = wm
+	water.position = Vector3(0, 0.03, z)
+	add_child(water)
+	for x in range(-44, 45, 2):
+		batch.add(Art.sphere(0.35), Color("b8aed0"), Vector3(x + randf() * 0.6, 0.05, z - 1.45), Vector3.ZERO, Vector3(1.4, 0.5, 1))
+		batch.add(Art.sphere(0.35), Color("b8aed0"), Vector3(x + randf() * 0.6, 0.05, z + 1.45), Vector3.ZERO, Vector3(1.4, 0.5, 1))
+	var bridges := [-9.0, 14.5]
+	# Colliders between the bridges so you can only cross on them.
+	var edges := [-44.0]
+	for b in bridges:
+		edges.append(b - 1.3)
+		edges.append(b + 1.3)
+	edges.append(44.0)
+	for i in range(0, edges.size(), 2):
+		var w: float = edges[i + 1] - edges[i]
+		Art.collider(self, Vector3(w, 2, 2.4), Vector3(edges[i] + w / 2, 1, z))
+	for b in bridges:
+		var n := Art.node(self, "Bridge", Vector3(b, 0, z))
+		for i in 7:
+			var t := (i - 3) / 3.0
+			Art.part(n, Art.box(Vector3(2.4, 0.15, 0.5)), Color("c98a5c"), Vector3(0, 0.25 * (1.0 - t * t) + 0.08, t * 1.7))
+		for sx in [-1, 1]:
+			for i in 5:
+				var t := (i - 2) / 2.0
+				Art.part(n, Art.cyl(0.05, 0.05, 0.7), Color("8b5a3c"), Vector3(1.15 * sx, 0.6 + 0.2 * (1.0 - t * t), t * 1.7))
+			Art.part(n, Art.box(Vector3(0.08, 0.08, 3.6)), Color("ff9fc4"), Vector3(1.15 * sx, 0.98, 0))
+
+
+func _gazebo(c: Vector3) -> void:
+	var n := Art.node(self, "Gazebo", c)
+	Art.part(n, Art.cyl(3.0, 3.1, 0.35, 8), Color("f1e3ee"), Vector3(0, 0.17, 0))
+	for i in 8:
+		var a := i * TAU / 8
+		if i == 2:
+			continue
+		Art.part(n, Art.cyl(0.12, 0.12, 2.6), Color("fff4f8"), Vector3(cos(a) * 2.7, 1.6, sin(a) * 2.7))
+	Art.part(n, Art.cyl(0.2, 3.4, 1.6, 8), Color("c38bff"), Vector3(0, 3.6, 0))
+	Art.part(n, Art.sphere(0.3), Color("ffe27a"), Vector3(0, 4.6, 0), Vector3.ZERO, Vector3.ONE, 1.5)
+	Art.light(n, Vector3(0, 2.6, 0), Color("ffd9a8"), 1.2, 6.0)
+	Art.part(n, Art.box(Vector3(1.4, 0.4, 0.6)), Color("c98a5c"), Vector3(0, 0.55, 0.2))
+	Art.collider(self, Vector3(1.4, 1, 0.6), c + Vector3(0, 0.5, 0.2))
+	for i in 8:
+		var a := i * TAU / 8
+		if i == 2:
+			continue
+		Art.collider_round(self, 0.2, 2.0, c + Vector3(cos(a) * 2.7, 0, sin(a) * 2.7))
+
+
+func _hedge_garden(c: Vector3) -> void:
+	for data in [[Vector3(-4, 0, -3), Vector3(6, 1.1, 0.8)], [Vector3(4, 0, -3), Vector3(6, 1.1, 0.8)],
+			[Vector3(-4, 0, 3), Vector3(6, 1.1, 0.8)], [Vector3(4, 0, 3), Vector3(6, 1.1, 0.8)],
+			[Vector3(-6.6, 0, 0), Vector3(0.8, 1.1, 6.8)], [Vector3(6.6, 0, 0), Vector3(0.8, 1.1, 6.8)]]:
+		var p: Vector3 = c + data[0]
+		var sz: Vector3 = data[1]
+		batch.add(Art.box(sz), Color("5dbb70"), p + Vector3(0, sz.y / 2, 0))
+		Art.collider(self, sz, p + Vector3(0, sz.y / 2, 0))
+	flower_bed(c, Vector2(9, 3.5), 70)
+	var arch := Art.node(self, "Arch", c + Vector3(0, 0, 3))
+	Art.part(arch, Art.torus(1.25, 1.45), Color("6cc978"), Vector3(0, 0.9, 0), Vector3(90, 0, 0), Vector3(1, 1, 1.4))
+	for i in 7:
+		var a := PI * i / 6.0
+		Art.part(arch, Art.sphere(0.12), [Color("ff8fb8"), Color("ffe27a"), Color("ffffff")][i % 3], Vector3(cos(a) * 1.35, 0.9 + sin(a) * 1.9, 0.1), Vector3.ZERO, Vector3.ONE, 0.3, false)
+
+
+func _wishing_tree(c: Vector3) -> void:
+	var n := Art.node(self, "WishingTree", c)
+	Art.part(n, Art.cyl(0.5, 0.8, 3.4), Color("a87a5c"), Vector3(0, 1.7, 0))
+	for data in [[Vector3(0, 4.3, 0), 2.4], [Vector3(-1.8, 3.8, 0.4), 1.6], [Vector3(1.9, 3.9, -0.2), 1.7], [Vector3(0.3, 5.6, -0.3), 1.5]]:
+		Art.part(n, Art.sphere(data[1]), Color("ffb3d1"), data[0], Vector3.ZERO, Vector3.ONE, 0.15)
+	for i in 10:
+		var a := i * TAU / 10
+		var lan := Art.part(n, Art.sphere(0.14), [Color("ffe27a"), Color("ff9fd8"), Color("8fe8ff")][i % 3], Vector3(cos(a) * 2.3, 2.8 + (i % 3) * 0.4, sin(a) * 2.3), Vector3.ZERO, Vector3(1, 1.3, 1), 3.0, false)
+		floater(lan, 0.1)
+	Art.ambient(n, Vector3(0, 4, 0), Vector3(3, 2, 3), Color("ffd3e6"), 30, "heart", 0.25, 5.0, Vector3(0, -0.3, 0))
+	Art.light(n, Vector3(0, 2.5, 1.5), Color("ffc2e0"), 1.5, 7.0)
+	Art.collider_round(self, 0.9, 3.0, c)
+	sign_board(c + Vector3(0, 0.9, 1.1), "Wishing Tree", Color("fff4e0"), 30)
+
+
+func _build_library(c: Vector3) -> void:
+	var n := Art.node(self, "Library", c)
+	var stone := Color("c9d6f2")
+	Art.part(n, Art.box(Vector3(8, 4.2, 6)), stone, Vector3(0, 2.1, 0))
+	Art.part(n, Art.box(Vector3(8.4, 0.35, 6.4)), Color("9fb2e0"), Vector3(0, 4.3, 0))
+	Art.part(n, Art.sphere(2.6, true), Color("5b8def"), Vector3(0, 4.45, 0), Vector3.ZERO, Vector3(1, 0.8, 1))
+	Art.part(n, Art.sphere(0.35), Color("ffe27a"), Vector3(0, 6.7, 0), Vector3.ZERO, Vector3.ONE, 2.0)
+	for x in [-2.8, -1.4, 1.4, 2.8]:
+		Art.part(n, Art.cyl(0.25, 0.28, 3.6), Color("f4f6ff"), Vector3(x, 1.8, 3.25))
+	Art.part(n, Art.box(Vector3(7.2, 0.4, 0.8)), Color("f4f6ff"), Vector3(0, 3.8, 3.3))
+	Art.part(n, Art.box(Vector3(1.6, 2.4, 0.15)), Color("5a4a8a"), Vector3(0, 1.2, 3.02))
+	Art.part(n, Art.cyl(0.8, 0.8, 0.15), Color("5a4a8a"), Vector3(0, 2.4, 3.02), Vector3(90, 0, 0))
+	Art.part(n, Art.cyl(0.55, 0.55, 0.17), Color("ffe6a8"), Vector3(0, 2.5, 3.04), Vector3(90, 0, 0), Vector3.ONE, 1.3, false)
+	for x in [-2.1, 2.1]:
+		Art.part(n, Art.box(Vector3(0.9, 1.4, 0.12)), Color("ffe6a8"), Vector3(x, 2.0, 3.02), Vector3.ZERO, Vector3.ONE, 1.2, false)
+	for i in 3:
+		Art.part(n, Art.box(Vector3(3.6 - i * 0.4, 0.15, 0.6)), Color("e8eefc"), Vector3(0, 0.075 + i * 0.15, 3.9 - i * 0.3))
+	for i in 5:
+		var book := Art.part(n, Art.box(Vector3(0.35, 0.45, 0.12)), [Color("ff8fb8"), Color("7cc8ff"), Color("ffd36b")][i % 3], Vector3(-3.5 + i * 1.75, 5.2 + (i % 2) * 0.5, 2.0), Vector3(0, i * 30, 12), Vector3.ONE, 0.5, false)
+		floater(book, 0.3)
+		spinner(book, 25)
+	Art.light(n, Vector3(0, 2.8, 4.6), Color("ffcf8a"), 1.2, 5.5)
+	sign_board(c + Vector3(0, 4.35, 3.6), "Moonlight Library", Color("eef2ff"), 36)
+	Art.collider(self, Vector3(8.2, 4, 6.4), c + Vector3(0, 2, 0))
+	for x in [-2.8, -1.4, 1.4, 2.8]:
+		Art.collider_round(self, 0.3, 2.0, c + Vector3(x, 0, 3.25))
+
+
+func _build_boutique(c: Vector3) -> void:
+	var n := Art.node(self, "Boutique", c)
+	var wall := Color("e8d4ff")
+	Art.part(n, Art.box(Vector3(7, 3.6, 5)), wall, Vector3(0, 1.8, 0))
+	Art.part(n, Art.prism(Vector3(7.6, 1.8, 5.6)), Color("ff8fb8"), Vector3(0, 4.5, 0))
+	Art.part(n, Art.box(Vector3(7.2, 0.3, 5.2)), Color("c3a6ff"), Vector3(0, 3.65, 0))
+	for i in 10:
+		Art.part(n, Art.box(Vector3(0.7, 0.08, 1.0)), Color("ffffff") if i % 2 else Color("c38bff"), Vector3(-3.15 + i * 0.7, 3.2, 2.9), Vector3(22, 0, 0))
+	for x in [-2.3, 2.3]:
+		Art.part(n, Art.box(Vector3(1.9, 1.9, 0.12)), Color("fff0f8"), Vector3(x, 1.5, 2.52), Vector3.ZERO, Vector3.ONE, 0.9, false)
+		var m := Art.node(n, "Mannequin", Vector3(x, 0.6, 2.2))
+		Art.part(m, Art.cyl(0.12, 0.45, 1.0), [Color("7cc8ff"), Color("ffd36b")][int(x > 0)], Vector3(0, 0.5, 0))
+		Art.part(m, Art.sphere(0.18), Color("f4e8ff"), Vector3(0, 1.2, 0))
+	Art.part(n, Art.box(Vector3(1.3, 2.2, 0.14)), Color("c38bff"), Vector3(0, 1.1, 2.52))
+	Art.part(n, Art.sphere(0.08), Color("ffd36b"), Vector3(0.45, 1.1, 2.62), Vector3.ZERO, Vector3.ONE, 1.0, false)
+	Art.part(n, Art.sphere(0.35), Color("ff8fb8"), Vector3(0, 2.75, 2.6), Vector3.ZERO, Vector3(1, 1, 0.3), 1.2, false)
+	Art.light(n, Vector3(0, 2.6, 3.6), Color("ffc2e0"), 1.3, 5.5)
+	sign_board(c + Vector3(0, 4.05, 2.9), "Velour's Boutique", Color("fff0f8"), 34)
+	Art.collider(self, Vector3(7.2, 4, 5.2), c + Vector3(0, 2, 0))
 
 
 func spawn_badge(pos: Vector3) -> void:
@@ -748,3 +918,232 @@ func _build_roof() -> void:
 		boss.scale = Vector3.ONE * 0.8
 		add_npc("boss", boss, Vector3(0, 0, -4.2), 0, "Face the Monday Monster", 3.2)
 		Art.light(self, Vector3(0, 2.5, -2.5), Color("ff6b8a"), 2.0, 7.0)
+
+
+# ============================================================ INTERIORS
+const INTERIOR_ENV := {
+	"top": Vector3(0.08, 0.06, 0.2), "mid": Vector3(0.2, 0.14, 0.38), "horizon": Vector3(0.4, 0.28, 0.5),
+	"ambient": Color("f5dcc8"), "ambient_energy": 0.3, "sun_color": Color("fff0e0"), "sun_energy": 0.5,
+	"sun_rot": Vector3(-68, -20, 0), "fog": Color("3a2c55"), "fog_density": 0.0,
+}
+
+
+## A cutaway room: floor, back and side walls, a low front wall with a door gap.
+func _room(w: float, d: float, wall: Color, floor_mat: Material, exit_id: String) -> void:
+	env = INTERIOR_ENV
+	cam_zoom = 0.72
+	ground_plane(Vector2(200, 200), Art.mat(Color("2a1f40")), -0.05)
+	slab(Vector3(w, 0.1, d), Vector3.ZERO, floor_mat)
+	var hw := w / 2.0
+	var hd := d / 2.0
+	Art.part(self, Art.box(Vector3(w + 1.0, 4.4, 0.5)), wall, Vector3(0, 2.2, -hd - 0.25))
+	Art.part(self, Art.box(Vector3(w + 1.0, 1.1, 0.55)), wall.darkened(0.15), Vector3(0, 0.55, -hd - 0.24))
+	Art.collider(self, Vector3(w + 1.0, 4, 0.5), Vector3(0, 2, -hd - 0.25))
+	for sx in [-1, 1]:
+		Art.part(self, Art.box(Vector3(0.5, 4.4, d + 0.5)), wall, Vector3(sx * (hw + 0.25), 2.2, 0))
+		Art.part(self, Art.box(Vector3(0.55, 1.1, d + 0.5)), wall.darkened(0.15), Vector3(sx * (hw + 0.24), 0.55, 0))
+		Art.collider(self, Vector3(0.5, 4, d + 0.5), Vector3(sx * (hw + 0.25), 2, 0))
+		var seg := hw - 1.3
+		Art.part(self, Art.box(Vector3(seg, 0.5, 0.35)), wall.darkened(0.1), Vector3(sx * (1.3 + seg / 2), 0.25, hd + 0.1))
+		Art.collider(self, Vector3(seg, 2, 0.35), Vector3(sx * (1.3 + seg / 2), 1, hd + 0.1))
+	slab(Vector3(2.0, 0.03, 1.0), Vector3(0, 0.07, hd - 0.5), Art.ground_mat(Color("e56b6f"), Color("d45a60"), 0))
+	add_interactable(exit_id, Vector3(0, 0, hd + 0.4), 1.1, "", true)
+	spawns = {"door": Vector3(0, 0, hd - 1.8)}
+	cam_min = Vector2(-maxf(0.0, hw - 6.0), -hd + 3.0)
+	cam_max = Vector2(maxf(0.0, hw - 6.0), hd - 3.0)
+	if cam_min.y > cam_max.y:
+		cam_min.y = 0.0
+		cam_max.y = 0.0
+
+
+func _night_window(pos: Vector3, size := Vector2(1.8, 1.6)) -> void:
+	batch.add(Art.box(Vector3(size.x + 0.25, size.y + 0.25, 0.1)), Color("fff4f8"), pos)
+	batch.add(Art.box(Vector3(size.x, size.y, 0.12)), Color("3a3f8a"), pos + Vector3(0, 0, 0.01), Vector3.ZERO, Vector3.ONE, 0.8)
+	for i in 4:
+		batch.add(Art.sphere(0.035), Color("fff8d0"), pos + Vector3(-size.x * 0.35 + i * size.x * 0.23, -0.3 + (i % 2) * 0.55, 0.08), Vector3.ZERO, Vector3.ONE, 3.0)
+	batch.add(Art.box(Vector3(0.06, size.y, 0.14)), Color("fff4f8"), pos + Vector3(0, 0, 0.02))
+
+
+func _table(p: Vector3, top := Color("f1e3ee"), stools := 2) -> void:
+	batch.add(Art.cyl(0.08, 0.12, 0.8), Color("8b5a3c"), p + Vector3(0, 0.4, 0))
+	batch.add(Art.cyl(0.7, 0.7, 0.08), top, p + Vector3(0, 0.82, 0))
+	for i in stools:
+		var a := PI * 0.5 + i * TAU / stools
+		var sp := p + Vector3(cos(a) * 1.1, 0, sin(a) * 1.1)
+		batch.add(Art.cyl(0.08, 0.1, 0.45), Color("fff1dc"), sp + Vector3(0, 0.22, 0))
+		batch.add(Art.sphere(0.32, true), [Color("ff6b8a"), Color("c38bff")][i % 2], sp + Vector3(0, 0.45, 0), Vector3.ZERO, Vector3(1, 0.5, 1))
+	Art.collider_round(self, 0.75, 1.0, p)
+
+
+func _hanging_lamp(p: Vector3, color := Color("ffd98a"), with_light := true) -> void:
+	batch.add(Art.cyl(0.015, 0.015, 1.4), Color("5a4a7a"), p + Vector3(0, 0.7, 0))
+	batch.add(Art.sphere(0.3, true), Color("c38bff"), p + Vector3(0, 0.05, 0))
+	batch.add(Art.sphere(0.14), color, p + Vector3(0, -0.02, 0), Vector3.ZERO, Vector3.ONE, 3.0)
+	if with_light:
+		Art.light(self, p + Vector3(0, -0.4, 0), color, 0.8, 6.0)
+
+
+func _build_home_in() -> void:
+	_room(12, 10, Color("ffd9e6"), Art.ground_mat(Color("d29a6c"), Color("c0875c"), 2, 0.9, Color("94603e")), "exit_home")
+	slab(Vector3(4.5, 0.03, 3.2), Vector3(0, 0.07, 0.8), Art.ground_mat(Color("ffb3d1"), Color("ffa3c6"), 0))
+	# Cozy bed
+	var bed := Art.node(self, "Bed", Vector3(-4.1, 0, -3.1))
+	Art.part(bed, Art.box(Vector3(2.2, 0.5, 3.0)), Color("a87a5c"), Vector3(0, 0.25, 0))
+	Art.part(bed, Art.box(Vector3(2.0, 0.25, 2.8)), Color("fffaf5"), Vector3(0, 0.62, 0))
+	Art.part(bed, Art.box(Vector3(2.1, 0.12, 1.9)), Color("ff9fc4"), Vector3(0, 0.78, 0.45))
+	Art.part(bed, Art.capsule(0.22, 1.2), Color("fff4e0"), Vector3(0, 0.85, -1.05), Vector3(0, 0, 90))
+	Art.part(bed, Art.box(Vector3(2.2, 1.4, 0.2)), Color("a87a5c"), Vector3(0, 0.7, -1.45))
+	for i in 5:
+		Art.part(bed, Art.sphere(0.07), Color("ffffff"), Vector3(-0.8 + i * 0.4, 0.86, 0.3 + (i % 2) * 0.5), Vector3.ZERO, Vector3(1, 0.4, 1), 0.2, false)
+	Art.collider(self, Vector3(2.2, 1, 3), Vector3(-4.1, 0.5, -3.1))
+	add_interactable("bed", Vector3(-4.1, 0, -1.2), 1.6, "Take a cozy nap")
+	# Fireplace
+	var fp := Art.node(self, "Fireplace", Vector3(1.5, 0, -4.6))
+	Art.part(fp, Art.box(Vector3(2.4, 2.2, 0.8)), Color("c9b6ec"), Vector3(0, 1.1, 0))
+	Art.part(fp, Art.box(Vector3(1.4, 1.0, 0.82)), Color("3a2c4a"), Vector3(0, 0.5, 0.02))
+	Art.part(fp, Art.box(Vector3(2.7, 0.2, 1.0)), Color("a893d8"), Vector3(0, 2.25, 0.05))
+	for i in 3:
+		Art.part(fp, Art.sphere(0.2 - i * 0.04), [Color("ff8a4c"), Color("ffb347"), Color("ffe27a")][i], Vector3(-0.2 + i * 0.2, 0.3 + i * 0.1, 0.35), Vector3.ZERO, Vector3(1, 1.6, 1), 3.5, false)
+	Art.ambient(fp, Vector3(0, 0.5, 0.4), Vector3(0.4, 0.1, 0.1), Color("ffb347"), 14, "soft", 0.25, 1.0, Vector3(0, 0.8, 0))
+	Art.light(fp, Vector3(0, 0.8, 1.2), Color("ffae6b"), 2.0, 7.0)
+	Art.part(fp, Art.box(Vector3(0.4, 0.5, 0.05)), Color("fff4e0"), Vector3(-0.8, 2.65, 0.1), Vector3(0, 0, 5))
+	Art.part(fp, Art.box(Vector3(0.35, 0.45, 0.05)), Color("ff9fc4"), Vector3(0.7, 2.6, 0.1), Vector3(0, 0, -6))
+	Art.collider(self, Vector3(2.4, 2, 0.8), Vector3(1.5, 1, -4.6))
+	add_interactable("photo", Vector3(1.5, 0, -3.4), 1.5, "Look at the photos")
+	_night_window(Vector3(-1.4, 2.4, -4.93))
+	_night_window(Vector3(4.2, 2.4, -4.93))
+	# Table, teapot, kitchen corner
+	_table(Vector3(3.4, 0, 0.8), Color("fff4e0"), 2)
+	batch.add(Art.sphere(0.18), Color("7cc8ff"), Vector3(3.4, 1.02, 0.8))
+	batch.add(Art.box(Vector3(2.6, 1.0, 0.9)), Color("fff4f8"), Vector3(-4.6, 0.5, 2.6))
+	batch.add(Art.box(Vector3(2.7, 0.1, 1.0)), Color("c98a5c"), Vector3(-4.6, 1.05, 2.6))
+	batch.add(Art.cyl(0.25, 0.22, 0.3), Color("ff8fb8"), Vector3(-5.1, 1.25, 2.6))
+	Art.collider(self, Vector3(2.6, 1, 0.9), Vector3(-4.6, 0.5, 2.6))
+	_bookshelf(Vector3(5.7, 0, -1.6), -90)
+	# Mochi's cushion
+	batch.add(Art.cyl(0.55, 0.6, 0.18), Color("c3a6ff"), Vector3(-1.2, 0.09, -1.4))
+	for p in [Vector3(-5.4, 0, -4.4), Vector3(5.4, 0, 3.8)]:
+		_plant(p)
+	_hanging_lamp(Vector3(0, 3.4, 0.5))
+	spawns["bed"] = Vector3(-2.2, 0, -1.2)
+
+
+func _build_cafe_in() -> void:
+	_room(14, 10, Color("fff1dc"), Art.ground_mat(Color("ffd9c2"), Color("f5c7ae"), 1, 1.0, Color("d9a58c")), "exit_cafe")
+	# Counter
+	Art.part(self, Art.box(Vector3(8, 1.1, 1.0)), Color("c98a5c"), Vector3(0, 0.55, -2.4))
+	Art.part(self, Art.box(Vector3(8.2, 0.12, 1.2)), Color("fff4e0"), Vector3(0, 1.15, -2.4))
+	for i in 8:
+		Art.part(self, Art.box(Vector3(0.9, 0.9, 0.05)), [Color("ff9fc4"), Color("ffffff")][i % 2], Vector3(-3.5 + i, 0.55, -1.88), Vector3.ZERO, Vector3.ONE, 0.0, false)
+	Art.collider(self, Vector3(8, 1.2, 1.0), Vector3(0, 0.6, -2.4))
+	# Pastry case with muffins
+	Art.part(self, Art.box(Vector3(2.0, 0.6, 0.8)), Color(0.85, 0.95, 1.0, 0.45), Vector3(-2.3, 1.5, -2.4), Vector3.ZERO, Vector3.ONE, 0.3, false)
+	for i in 4:
+		Art.part(self, Art.sphere(0.13), Color("f0a050"), Vector3(-3.0 + i * 0.45, 1.34, -2.4), Vector3.ZERO, Vector3(1, 0.8, 1), 0.0, false)
+		Art.part(self, Art.sphere(0.04), Color("e0405a"), Vector3(-3.0 + i * 0.45, 1.46, -2.4), Vector3.ZERO, Vector3.ONE, 0.3, false)
+	# The magical coffee cauldron
+	var caul := Art.node(self, "Cauldron", Vector3(2.8, 0, -4.1))
+	Art.part(caul, Art.sphere(0.7), Color("4a3a5a"), Vector3(0, 0.65, 0), Vector3.ZERO, Vector3(1, 0.85, 1))
+	Art.part(caul, Art.cyl(0.6, 0.6, 0.08), Color("c98a5c"), Vector3(0, 1.2, 0), Vector3.ZERO, Vector3.ONE, 1.2)
+	Art.ambient(caul, Vector3(0, 1.3, 0), Vector3(0.3, 0.05, 0.3), Color(1, 1, 1, 0.7), 12, "soft", 0.4, 2.0, Vector3(0, 0.9, 0))
+	Art.light(caul, Vector3(0, 1.8, 0.8), Color("ffcf8a"), 1.2, 5.0)
+	# Shelves of glowing jars and the menu board
+	for row in 2:
+		batch.add(Art.box(Vector3(4.4, 0.1, 0.5)), Color("a87a5c"), Vector3(-2.5, 2.0 + row * 0.9, -4.7))
+		for i in 7:
+			batch.add(Art.cyl(0.14, 0.14, 0.4), [Color("ff8fb8"), Color("8fe8ff"), Color("ffe27a"), Color("9fffb8")][(i + row) % 4], Vector3(-4.3 + i * 0.6, 2.27 + row * 0.9, -4.65), Vector3.ZERO, Vector3.ONE, 1.4)
+	sign_board(Vector3(2.8, 3.0, -4.9), "Muffin 8  Tea 10  Latte 5", Color("3a3050"), 30)
+	for t in [Vector3(-4.2, 0, 1.4), Vector3(0, 0, 0.5), Vector3(4.2, 0, 1.2)]:
+		_table(t, Color("fff4e0"), 2)
+	for x in [-4.0, 0.0, 4.0]:
+		_hanging_lamp(Vector3(x, 3.6, 0.8), Color("ffd98a"), x == 0.0)
+	_night_window(Vector3(-6.97, 2.4, 0.5), Vector2(1.6, 1.4))
+	for p in [Vector3(-6.3, 0, -4.3), Vector3(6.3, 0, 3.8), Vector3(-6.3, 0, 3.8)]:
+		_plant(p)
+	var bree := Models.humanoid({"robe": Color("ffb3a0"), "hair": Color("8fe0c8"), "hair_style": "bun",
+		"extras": ["wings", "apron", "flowers"], "accent": Color("ffd36b"), "scale": 0.9})
+	add_npc("bree", bree, Vector3(-0.6, 0, -3.6), 0, "Talk to Bree", 2.6)
+	add_npc("gus", Models.humanoid({"robe": Color("5b8def"), "hair": Color("f0f0f0"), "hat": "witch", "hat_color": Color("e05a5a"),
+		"hair_style": "none", "extras": ["beard"], "accent": Color("ffd36b"), "scale": 0.7}), Vector3(-4.2, 0.1, 2.5), 180, "Talk to Gus")
+	add_npc("nyx", Models.humanoid({"robe": Color("6a4fb8"), "hair": Color("2b1f3a"), "hair_style": "bob",
+		"extras": ["wings"], "accent": Color("ff6b8a")}), Vector3(4.2, 0, 2.3), 200, "Talk to Nyx")
+
+
+func _build_library_in() -> void:
+	_room(16, 12, Color("c9d6f2"), Art.ground_mat(Color("8fa6d8"), Color("7f96cc"), 1, 0.8, Color("6a80b8")), "exit_library")
+	slab(Vector3(6, 0.03, 4), Vector3(0, 0.07, 1.0), Art.ground_mat(Color("c38bff"), Color("b47cf0"), 0))
+	for x in [-5.6, -2.8, 2.8, 5.6]:
+		_bookshelf(Vector3(x, 0, -5.6), 0)
+	for z in [-3.0, 0.5, 3.5]:
+		_bookshelf(Vector3(-7.6, 0, z), 90)
+		_bookshelf(Vector3(7.6, 0, z), -90)
+	# Professor Hoot's desk
+	Art.part(self, Art.box(Vector3(3.2, 1.0, 1.2)), Color("8b5a3c"), Vector3(0, 0.5, -3.0))
+	Art.part(self, Art.box(Vector3(3.4, 0.1, 1.4)), Color("c98a5c"), Vector3(0, 1.05, -3.0))
+	Art.part(self, Art.box(Vector3(0.5, 0.08, 0.4)), Color("fff4e0"), Vector3(-0.8, 1.14, -3.0), Vector3(0, 15, 0))
+	Art.part(self, Art.cyl(0.06, 0.06, 0.25), Color("fff4e0"), Vector3(1.1, 1.22, -3.0))
+	Art.part(self, Art.sphere(0.06), Color("ffcf6b"), Vector3(1.1, 1.4, -3.0), Vector3.ZERO, Vector3(1, 1.5, 1), 4.0, false)
+	Art.collider(self, Vector3(3.2, 1, 1.2), Vector3(0, 0.5, -3.0))
+	var hoot := Models.owl()
+	hoot.scale = Vector3.ONE * 1.3
+	add_npc("hoot", hoot, Vector3(0, 0, -4.2), 0, "Talk to Professor Hoot", 2.6)
+	# Globe, reading tables, floating books
+	var globe := Art.node(self, "Globe", Vector3(-4.5, 0, -1.5))
+	Art.part(globe, Art.cyl(0.08, 0.3, 1.0), Color("8b5a3c"), Vector3(0, 0.5, 0))
+	var g := Art.part(globe, Art.sphere(0.5), Color("7cc8ff"), Vector3(0, 1.5, 0), Vector3(0, 0, 20), Vector3.ONE, 0.4)
+	spinner(g, 20)
+	Art.part(globe, Art.torus(0.52, 0.58), Color("ffd36b"), Vector3(0, 1.5, 0), Vector3(90, 0, 20))
+	Art.collider_round(self, 0.5, 1.5, Vector3(-4.5, 0, -1.5))
+	_table(Vector3(4.5, 0, 1.5), Color("c98a5c"), 2)
+	_table(Vector3(-4.0, 0, 3.0), Color("c98a5c"), 2)
+	for i in 9:
+		var book := Art.part(self, Art.box(Vector3(0.4, 0.5, 0.12)), [Color("ff8fb8"), Color("7cc8ff"), Color("ffd36b"), Color("9fffb8")][i % 4],
+			Vector3(randf_range(-6, 6), randf_range(2.6, 3.8), randf_range(-4, 3)), Vector3(randf() * 40, randf() * 360, randf() * 30), Vector3.ONE, 0.6, false)
+		floater(book, 0.25)
+		spinner(book, randf_range(-30, 30))
+	Art.ambient(self, Vector3(0, 2.5, 0), Vector3(7, 1.5, 5), Color("c8e0ff"), 30, "sparkle", 0.18, 3.0)
+	for p in [Vector3(-4, 3.8, -1), Vector3(4, 3.8, -1), Vector3(0, 3.8, 3)]:
+		Art.light(self, p, Color("ffe0b0"), 1.2, 8.0)
+	shard("s3", Vector3(6.4, 0, -4.2))
+
+
+func _build_boutique_in() -> void:
+	_room(12, 9, Color("f1dcff"), Art.ground_mat(Color("fff0f8"), Color("f5e0ee"), 1, 1.1, Color("e0c0d8")), "exit_boutique")
+	slab(Vector3(4, 0.03, 3), Vector3(0, 0.07, 0.8), Art.ground_mat(Color("ff9fc4"), Color("ff8fb8"), 0))
+	# Clothes racks
+	for rack in [[Vector3(-3.8, 0, -3.3), [Color("7cc8ff"), Color("ffd36b"), Color("ff8fb8"), Color("9fffb8"), Color("c38bff")]],
+			[Vector3(-3.8, 0, 0.8), [Color("ff6b8a"), Color("fff4e0"), Color("5fc9a8"), Color("ffb347"), Color("8f6ee8")]]]:
+		var p: Vector3 = rack[0]
+		batch.add(Art.cyl(0.04, 0.04, 2.6), Color("c9a6ff"), p + Vector3(0, 1.8, 0), Vector3(0, 0, 90))
+		for sx in [-1.25, 1.25]:
+			batch.add(Art.cyl(0.04, 0.05, 1.8), Color("c9a6ff"), p + Vector3(sx, 0.9, 0))
+		var cols: Array = rack[1]
+		for i in cols.size():
+			batch.add(Art.cyl(0.08, 0.32, 1.0), cols[i], p + Vector3(-1.0 + i * 0.5, 1.2, 0))
+		Art.collider(self, Vector3(2.6, 2, 0.5), p + Vector3(0, 1, 0))
+	# Mannequins and a hat stand
+	for data in [[Vector3(1.5, 0, 1.8), Color("ff8fb8")], [Vector3(3.5, 0, 1.8), Color("7cc8ff")]]:
+		var m := Art.node(self, "Mannequin", data[0])
+		Art.part(m, Art.cyl(0.05, 0.3, 0.2), Color("c9a6ff"), Vector3(0, 0.1, 0))
+		Art.part(m, Art.cyl(0.15, 0.45, 1.1), data[1], Vector3(0, 0.75, 0))
+		Art.part(m, Art.sphere(0.2), Color("f4e8ff"), Vector3(0, 1.5, 0))
+		Art.part(m, Art.cyl(0.0, 0.22, 0.45), data[1].darkened(0.2), Vector3(0, 1.85, 0))
+		Art.collider_round(self, 0.4, 1.5, data[0])
+	# The magic mirror
+	var mirror := Art.node(self, "Mirror", Vector3(3.5, 0, -4.15))
+	Art.part(mirror, Art.box(Vector3(1.8, 2.8, 0.2)), Color("ffd36b"), Vector3(0, 1.6, 0), Vector3.ZERO, Vector3.ONE, 0.4)
+	Art.part(mirror, Art.box(Vector3(1.5, 2.5, 0.22)), Color("d8ecff"), Vector3(0, 1.6, 0.01), Vector3.ZERO, Vector3.ONE, 0.9)
+	Art.part(mirror, Art.sphere(0.2), Color("ff8fb8"), Vector3(0, 3.1, 0.1), Vector3.ZERO, Vector3.ONE, 1.5)
+	Art.ambient(mirror, Vector3(0, 1.6, 0.3), Vector3(0.7, 1.2, 0.1), Color("fff3b0"), 12, "sparkle", 0.2, 2.0)
+	Art.collider(self, Vector3(1.8, 3, 0.4), Vector3(3.5, 1.5, -4.15))
+	add_interactable("mirror", Vector3(3.5, 0, -2.9), 1.5, "Try on outfits")
+	# Counter with Madame Velour
+	Art.part(self, Art.box(Vector3(2.6, 1.0, 0.9)), Color("c38bff"), Vector3(-0.8, 0.5, -3.1))
+	Art.part(self, Art.box(Vector3(2.8, 0.1, 1.0)), Color("fff0f8"), Vector3(-0.8, 1.05, -3.1))
+	Art.collider(self, Vector3(2.6, 1, 0.9), Vector3(-0.8, 0.5, -3.1))
+	add_npc("velour", Models.humanoid({"robe": Color("e05aa8"), "hair": Color("e8e8f0"), "hat": "circlet",
+		"hair_style": "long", "extras": ["ears", "cape"], "accent": Color("ffd36b")}), Vector3(-0.8, 0, -4.1), 0, "Talk to Madame Velour", 2.4)
+	for p in [Vector3(-5.4, 0, -3.9), Vector3(5.4, 0, 3.4)]:
+		_plant(p)
+	_hanging_lamp(Vector3(0, 3.4, 0), Color("ffc2e0"))
+	_night_window(Vector3(0.8, 2.6, -4.43), Vector2(1.4, 1.2))

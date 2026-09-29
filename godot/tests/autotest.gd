@@ -251,6 +251,8 @@ func _run() -> void:
 	check(main.mode == main.Mode.EXPLORE, "exploring after intro")
 	await shot("04_city_start")
 
+	check(main.world.map_id == "home_in", "new game starts at home")
+	await shot("04a_home_inside")
 	# Walk around with real input.
 	var start: Vector3 = main.player.position
 	Input.action_press("move_down")
@@ -258,17 +260,54 @@ func _run() -> void:
 	await _wait(1.0)
 	Input.action_release("move_down")
 	Input.action_release("move_right")
-	check(main.player.position.distance_to(start) > 2.0, "player walks with input")
+	check(main.player.position.distance_to(start) > 1.5, "player walks with input")
+	await interact("bed")
+	# Leave home through the door.
+	await teleport(Vector3(0, 0, 3.4))
+	await teleport(Vector3(0, 0, 5.2))
+	await _wait(1.2)
+	check(main.world.map_id == "city", "left home into the city")
+	await shot("04_city_start")
 
-	# Cafe (quest 0 -> 1)
+	# Cafe (quest 0 -> 1): enter, talk to Bree at the counter
 	await teleport(Vector3(0, 0, -6.8))
 	await shot("05_cafe_front")
-	main.interact("cafe")
+	await interact("cafe")
+	check(main.world.map_id == "cafe_in", "entered the cafe")
+	await teleport(Vector3(-0.6, 0, -1.4))
+	await shot("05b_cafe_inside")
+	main.interact("bree")
 	await _wait(1.2)
 	await shot("06_cafe_dialog")
 	await drain_dialogs()
 	check(Game.state["quest"] == 1, "quest 1 after cafe")
 	check(Game.state["spells"].has("flame"), "learned flame")
+	await teleport(Vector3(0, 0, 4.9))
+	await _wait(1.2)
+	check(main.world.map_id == "city", "left the cafe")
+
+	# Library: Professor Hoot teaches Heal Glow; a shard hides inside.
+	await teleport(Vector3(-32, 0, -6.8))
+	await interact("library")
+	await teleport(Vector3(0, 0, -1.6))
+	await shot("05c_library")
+	await interact("hoot")
+	check(Game.state["spells"].has("heal"), "learned heal")
+	await teleport(Vector3(5.0, 0, -3.0))
+	await teleport(Vector3(6.4, 0, -4.2))
+	await drain_dialogs(8.0)
+	await teleport(Vector3(0, 0, 5.9))
+	await _wait(1.2)
+
+	# Boutique: the magic mirror changes outfits.
+	await teleport(Vector3(31, 0, -6.8))
+	await interact("boutique")
+	await teleport(Vector3(3.5, 0, -2.2))
+	await shot("05d_boutique")
+	await interact("mirror")
+	await teleport(Vector3(0, 0, 4.6))
+	await _wait(1.2)
+	check(main.world.map_id == "city", "back in the city")
 
 	# Tower door without badge (quest 1 -> 2)
 	await teleport(Vector3(15, 0, -6.5))
@@ -321,11 +360,12 @@ func _run() -> void:
 	check(Game.state["quest"] == 3, "quest 3 after badge")
 
 	# Shards in the city
-	for p in [Vector3(-21.5, 0, -12.5), Vector3(10.5, 0, 12.8), Vector3(22, 0, -2.3)]:
-		await teleport(p + Vector3(0, 0, 1.5))
+	for p in [Vector3(-23.5, 0, -12.8), Vector3(3.2, 0, 27.5)]:
+		await teleport(p + Vector3(1.5, 0, 0))
 		await teleport(p)
 		await drain_dialogs(5.0)
-	check(Game.state["shards"].size() == 3, "3 shards in city (%d)" % Game.state["shards"].size())
+	await shot("11b_wishing_tree")
+	check(Game.state["shards"].size() == 3, "3 shards by now (%d)" % Game.state["shards"].size())
 
 	# Enter the tower
 	await teleport(Vector3(15, 0, -6.5))
@@ -384,7 +424,7 @@ func _run() -> void:
 					await _wait(0.1)
 					tt += 0.1
 			await after_battle_ok("defeat")
-			check(main.world.map_id == "city", "woke up in the city after defeat")
+			check(main.world.map_id == "home_in", "woke up at home after defeat")
 			check(Game.state["hp"] == Game.state["max_hp"], "healed after defeat")
 			break
 

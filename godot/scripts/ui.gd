@@ -42,6 +42,7 @@ var _toast_box: VBoxContainer
 var _banner: Label
 var _fade: ColorRect
 var _hint: Label
+var _rotate_hint: Label
 
 
 func _ready() -> void:
@@ -85,6 +86,19 @@ func _ready() -> void:
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fade.modulate.a = 0.0
 	add_child(_fade)
+	_rotate_hint = Label.new()
+	_rotate_hint.text = "Turn your phone sideways\nfor the best view!"
+	_rotate_hint.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_rotate_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_rotate_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_rotate_hint.add_theme_font_size_override("font_size", 64)
+	_rotate_hint.add_theme_color_override("font_color", Color.WHITE)
+	_rotate_hint.add_theme_color_override("font_outline_color", Color("6a3a8a"))
+	_rotate_hint.add_theme_constant_override("outline_size", 20)
+	_rotate_hint.theme = theme
+	_rotate_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rotate_hint.visible = false
+	add_child(_rotate_hint)
 	Game.stats_changed.connect(refresh)
 
 
@@ -306,61 +320,54 @@ func _build_dialog() -> void:
 	dialog.visible = false
 	add_child(dialog)
 
-	_dlg_panel = PanelContainer.new()
-	_dlg_panel.anchor_left = 0.5
-	_dlg_panel.anchor_right = 0.5
-	_dlg_panel.anchor_top = 1.0
-	_dlg_panel.anchor_bottom = 1.0
-	_dlg_panel.offset_left = -520
-	_dlg_panel.offset_right = 520
-	_dlg_panel.offset_top = -210
-	_dlg_panel.offset_bottom = -24
-	_dlg_panel.add_theme_stylebox_override("panel", flat(Color(1, 0.985, 0.995, 0.97), 26, PINK, 4, 22))
-	_dlg_panel.gui_input.connect(_on_dialog_gui_input)
-	dialog.add_child(_dlg_panel)
-	_dlg_text = RichTextLabel.new()
-	_dlg_text.bbcode_enabled = true
-	_dlg_text.fit_content = false
-	_dlg_text.scroll_active = false
-	_dlg_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_dlg_text.add_theme_font_size_override("normal_font_size", 30)
-	_dlg_text.add_theme_font_size_override("bold_font_size", 30)
-	_dlg_text.add_theme_constant_override("line_separation", 6)
-	_dlg_panel.add_child(_dlg_text)
-
-	_dlg_name_panel = PanelContainer.new()
-	_dlg_name_panel.anchor_left = 0.5
-	_dlg_name_panel.anchor_top = 1.0
-	_dlg_name_panel.anchor_right = 0.5
-	_dlg_name_panel.anchor_bottom = 1.0
-	_dlg_name_panel.offset_left = -500
-	_dlg_name_panel.offset_top = -236
-	_dlg_name_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dialog.add_child(_dlg_name_panel)
-	_dlg_name = label("", 26, Color.WHITE)
-	_dlg_name_panel.add_child(_dlg_name)
-
-	_dlg_next = label("v", 28, PINK)
-	_dlg_next.anchor_left = 0.5
-	_dlg_next.anchor_right = 0.5
-	_dlg_next.anchor_top = 1.0
-	_dlg_next.anchor_bottom = 1.0
-	_dlg_next.offset_left = 470
-	_dlg_next.offset_top = -72
-	dialog.add_child(_dlg_next)
+	# Bottom strip: choices, then the speaker's name tag, then the text box.
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	margin.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var touch := DisplayServer.is_touchscreen_available()
+	margin.add_theme_constant_override("margin_left", 40)
+	margin.add_theme_constant_override("margin_right", 300 if touch else 40)
+	margin.add_theme_constant_override("margin_bottom", 20)
+	dialog.add_child(margin)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(col)
 
 	_choices = VBoxContainer.new()
-	_choices.anchor_left = 0.5
-	_choices.anchor_right = 0.5
-	_choices.anchor_top = 1.0
-	_choices.anchor_bottom = 1.0
-	_choices.offset_right = 520
-	_choices.offset_left = 120
-	_choices.offset_bottom = -228
-	_choices.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_choices.alignment = BoxContainer.ALIGNMENT_END
+	_choices.size_flags_horizontal = Control.SIZE_SHRINK_END
 	_choices.add_theme_constant_override("separation", 8)
-	dialog.add_child(_choices)
+	col.add_child(_choices)
+
+	_dlg_name_panel = PanelContainer.new()
+	_dlg_name_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_dlg_name_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(_dlg_name_panel)
+	_dlg_name = label("", 28, Color.WHITE)
+	_dlg_name_panel.add_child(_dlg_name)
+
+	_dlg_panel = PanelContainer.new()
+	_dlg_panel.custom_minimum_size = Vector2(0, 150)
+	_dlg_panel.add_theme_stylebox_override("panel", flat(Color(1, 0.985, 0.995, 0.97), 26, PINK, 4, 20))
+	_dlg_panel.gui_input.connect(_on_dialog_gui_input)
+	col.add_child(_dlg_panel)
+	var inner := VBoxContainer.new()
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dlg_panel.add_child(inner)
+	_dlg_text = RichTextLabel.new()
+	_dlg_text.bbcode_enabled = true
+	_dlg_text.fit_content = true
+	_dlg_text.scroll_active = false
+	_dlg_text.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_dlg_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dlg_text.add_theme_font_size_override("normal_font_size", 32)
+	_dlg_text.add_theme_font_size_override("bold_font_size", 32)
+	_dlg_text.add_theme_constant_override("line_separation", 6)
+	inner.add_child(_dlg_text)
+	_dlg_next = label("tap to continue  v", 22, PINK)
+	_dlg_next.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	inner.add_child(_dlg_next)
 
 
 func is_dialog_open() -> bool:
@@ -395,12 +402,15 @@ func _open(speaker: String, text: String, color: Color, options: Array) -> void:
 	_dlg_text.visible_characters = 0
 	_chars = 0.0
 	_typing = true
-	_dlg_next.visible = false
+	_dlg_next.visible = true
+	_dlg_next.text = ""
 	for c in _choices.get_children():
 		c.queue_free()
 
 
 func _process(delta: float) -> void:
+	var vs := get_viewport().get_visible_rect().size
+	_rotate_hint.visible = DisplayServer.is_touchscreen_available() and vs.y > vs.x * 1.1
 	if _typing:
 		var before := int(_chars)
 		_chars += delta * 55.0
@@ -411,7 +421,7 @@ func _process(delta: float) -> void:
 		if int(_chars) >= total:
 			_finish_typing()
 	if _dlg_next.visible:
-		_dlg_next.offset_top = -72 + sin(Time.get_ticks_msec() / 150.0) * 3.0
+		_dlg_next.modulate.a = 0.55 + 0.45 * sin(Time.get_ticks_msec() / 180.0)
 
 
 func _finish_typing() -> void:
@@ -419,6 +429,7 @@ func _finish_typing() -> void:
 	_dlg_text.visible_characters = -1
 	if _options.is_empty():
 		_dlg_next.visible = true
+		_dlg_next.text = "tap to continue  v" if DisplayServer.is_touchscreen_available() else "Space to continue  v"
 	else:
 		for i in _options.size():
 			var b := Button.new()

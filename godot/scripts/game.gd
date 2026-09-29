@@ -122,7 +122,7 @@ func new_game(hero_name: String, style: String, robe: int, hair: int) -> void:
 		"level": 1, "xp": 0, "hp": 40, "max_hp": 40, "mp": 14, "max_mp": 14, "atk": 8, "def": 2,
 		"coins": 10, "items": {"muffin": 1, "tea": 0}, "spells": ["sparkle"],
 		"quest": 0, "flags": {}, "shards": [], "friends": {}, "known_weak": {},
-		"map": "city", "pos": [-13.0, 0.0, -5.0], "tutorial_timing": 0,
+		"map": "home_in", "pos": [-2.2, -1.2], "tutorial_timing": 0,
 	}
 	stats_changed.emit()
 
