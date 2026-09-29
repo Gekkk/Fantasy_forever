@@ -298,7 +298,7 @@ func _build_city() -> void:
 
 	# Street furniture
 	for x in [-36, -28, -20, -10, 0, 10, 20, 28, 36]:
-		lamp(Vector3(x + 2.5, 0, -4.6), x == -20 or x == 0 or x == 20)
+		lamp(Vector3(x + 2.5, 0, -4.6), x == 0)
 	for x in [-34, -18, -4, 5, 19, 34]:
 		lamp(Vector3(x, 0, 1.3), false, Color("ffc2e0"))
 	var mailbox := Art.node(self, "Mailbox", Vector3(-6, 0, -5.6))
@@ -359,7 +359,7 @@ func _build_city() -> void:
 	bench(Vector3(-5.5, 0, 10.5), 0)
 	bench(Vector3(18, 0, 11), -90)
 	bench(Vector3(-3, 0, 17), 0)
-	lamp(Vector3(-9, 0, 4.5), true, Color("ffc2e0"))
+	lamp(Vector3(-9, 0, 4.5), false, Color("ffc2e0"))
 	lamp(Vector3(12, 0, 12), false, Color("ffc2e0"))
 	lamp(Vector3(-24, 0, 15), false, Color("ffc2e0"))
 	lamp(Vector3(24, 0, 15), true, Color("ffc2e0"))
@@ -547,7 +547,7 @@ func _build_library(c: Vector3) -> void:
 		var book := Art.part(n, Art.box(Vector3(0.35, 0.45, 0.12)), [Color("ff8fb8"), Color("7cc8ff"), Color("ffd36b")][i % 3], Vector3(-3.5 + i * 1.75, 5.2 + (i % 2) * 0.5, 2.0), Vector3(0, i * 30, 12), Vector3.ONE, 0.5, false)
 		floater(book, 0.3)
 		spinner(book, 25)
-	Art.light(n, Vector3(0, 2.8, 4.6), Color("ffcf8a"), 1.2, 5.5)
+
 	sign_board(c + Vector3(0, 4.35, 3.6), "Moonlight Library", Color("eef2ff"), 36)
 	Art.collider(self, Vector3(8.2, 4, 6.4), c + Vector3(0, 2, 0))
 	for x in [-2.8, -1.4, 1.4, 2.8]:
@@ -570,7 +570,7 @@ func _build_boutique(c: Vector3) -> void:
 	Art.part(n, Art.box(Vector3(1.3, 2.2, 0.14)), Color("c38bff"), Vector3(0, 1.1, 2.52))
 	Art.part(n, Art.sphere(0.08), Color("ffd36b"), Vector3(0.45, 1.1, 2.62), Vector3.ZERO, Vector3.ONE, 1.0, false)
 	Art.part(n, Art.sphere(0.35), Color("ff8fb8"), Vector3(0, 2.75, 2.6), Vector3.ZERO, Vector3(1, 1, 0.3), 1.2, false)
-	Art.light(n, Vector3(0, 2.6, 3.6), Color("ffc2e0"), 1.3, 5.5)
+
 	sign_board(c + Vector3(0, 4.05, 2.9), "Velour's Boutique", Color("fff0f8"), 34)
 	Art.collider(self, Vector3(7.2, 4, 5.2), c + Vector3(0, 2, 0))
 
@@ -626,7 +626,7 @@ func _build_home(c: Vector3) -> void:
 		Art.part(n, Art.box(Vector3(1.3, 0.28, 0.35)), Color("ff9fc4"), Vector3(x, 1.2, 2.7))
 		for i in 4:
 			Art.part(n, Art.sphere(0.1), [Color("ffe27a"), Color("ffffff"), Color("c3a6ff"), Color("ff6b8a")][i], Vector3(x - 0.45 + i * 0.3, 1.42, 2.7), Vector3.ZERO, Vector3.ONE, 0.2, false)
-	Art.light(n, Vector3(0, 2.6, 3.2), Color("ffcf8a"), 1.2, 5.0)
+
 	var heart := Art.part(n, Art.sphere(0.25), Color("ff7eb6"), Vector3(0, 3.8, 2.95), Vector3.ZERO, Vector3(1, 1, 0.3), 1.2, false)
 	heart.name = "HeartSign"
 	Art.collider(self, Vector3(6.2, 4, 5.2), c + Vector3(0, 2, 0))
@@ -670,7 +670,7 @@ func _build_cafe(c: Vector3) -> void:
 	Art.light(caul, Vector3(0, 1.8, 0), Color("7cff9a"), 1.2, 4.0)
 	Art.collider_round(self, 0.9, 1.4, c + Vector3(4.2, 0, 1.3))
 	sign_board(c + Vector3(0, 3.35, 3.45), "Bubbling Cauldron", Color("fff4e0"), 34)
-	Art.light(n, Vector3(0, 2.4, 3.8), Color("ffcf8a"), 1.3, 5.5)
+
 	Art.collider_round(self, 3.2, 3.0, c)
 
 

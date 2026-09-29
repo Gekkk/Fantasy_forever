@@ -37,7 +37,7 @@ func face(dir: Vector3) -> void:
 		model.rotation.y = atan2(dir.x, dir.z)
 
 
-func _physics_process(delta: float) -> void:
+func _process(delta: float) -> void:
 	var input := Vector2.ZERO
 	if can_move:
 		input = Input.get_vector("move_left", "move_right", "move_up", "move_down")

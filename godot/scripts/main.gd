@@ -58,6 +58,9 @@ func _ready() -> void:
 	cam.fov = 40
 	add_child(cam)
 
+	_setup_quality()
+	get_viewport().size_changed.connect(_update_render_scale)
+
 	ui = UI.new()
 	add_child(ui)
 	touch = TouchControls.new()
@@ -76,6 +79,56 @@ func _ready() -> void:
 		var t = load("res://tests/autotest.gd").new()
 		t.main = self
 		add_child(t)
+
+
+# ============================================================== quality
+# Big PC screens (1440p, 4K, Retina) make the browser draw 2-4x more pixels
+# than a phone. Render 3D at roughly 720p-level pixel count and upscale; UI
+# stays crisp. If it's still slow, step quality down automatically.
+const TARGET_PIXELS := 1280.0 * 720.0 * 1.25
+var quality_level := 0
+var _fps_timer := 0.0
+var _fps_samples: Array = []
+
+
+func _setup_quality() -> void:
+	var vp := get_viewport()
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	_update_render_scale()
+
+
+func _update_render_scale() -> void:
+	var vp := get_viewport()
+	var px := Vector2(DisplayServer.window_get_size())
+	var area := maxf(1.0, px.x * px.y)
+	var s := clampf(sqrt(TARGET_PIXELS / area), 0.4, 1.0)
+	s *= [1.0, 0.8, 0.65][quality_level]
+	vp.scaling_3d_scale = s
+	vp.msaa_3d = Viewport.MSAA_2X if (s >= 0.99 and quality_level == 0) else Viewport.MSAA_DISABLED
+
+
+func _watch_fps(delta: float) -> void:
+	if quality_level >= 2 or mode == Mode.TITLE or mode == Mode.MENU:
+		return
+	_fps_timer += delta
+	if _fps_timer < 1.0:
+		return
+	_fps_timer = 0.0
+	_fps_samples.append(Engine.get_frames_per_second())
+	if _fps_samples.size() < 4:
+		return
+	var avg := 0.0
+	for f in _fps_samples:
+		avg += f
+	avg /= _fps_samples.size()
+	_fps_samples.clear()
+	if avg < 45.0:
+		quality_level += 1
+		if quality_level >= 2:
+			sun.shadow_enabled = false
+			env.glow_enabled = false
+		_update_render_scale()
+		print("Quality lowered to level %d (avg fps %.0f)" % [quality_level, avg])
 
 
 # ================================================================ title
@@ -225,6 +278,7 @@ func _cam_target() -> Vector3:
 
 # ============================================================== process
 func _process(delta: float) -> void:
+	_watch_fps(delta)
 	if mode == Mode.TITLE:
 		_title_t += delta
 		if player:
