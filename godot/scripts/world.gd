@@ -61,19 +61,21 @@ func build(id: String) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	# Collected shards and the badge get freed, so drop stale entries first.
+	_floaters = _floaters.filter(func(f): return is_instance_valid(f[0]))
+	_spinners = _spinners.filter(func(s): return is_instance_valid(s[0]))
 	for f in _floaters:
-		var n: Node3D = f[0]
-		if is_instance_valid(n):
-			n.position.y = f[1] + sin(_t * 1.4 + f[2]) * f[3]
+		f[0].position.y = f[1] + sin(_t * 1.4 + f[2]) * f[3]
 	for s in _spinners:
-		var n: Node3D = s[0]
-		if is_instance_valid(n):
-			n.rotation_degrees.y += s[1] * delta
+		s[0].rotation_degrees.y += s[1] * delta
 	if _tram:
 		_tram.position.x += delta * 4.0
 		if _tram.position.x > 40:
 			_tram.position.x = -40
-	for id in markers:
+	for id in markers.keys():
+		if not is_instance_valid(markers[id]):
+			markers.erase(id)
+			continue
 		var m: Label3D = markers[id]
 		m.position.y = m.get_meta("base_y") + sin(_t * 4.0) * 0.12
 

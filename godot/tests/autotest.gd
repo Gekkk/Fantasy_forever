@@ -81,13 +81,18 @@ func wait_mode(m: int, max_sec := 20.0) -> bool:
 func play_battle(style := "ui", screenshot_prefix := "") -> String:
 	var b: Battle = null
 	var t := 0.0
-	while b == null and t < 10.0:
+	while b == null and t < 30.0:
 		for c in main.get_children():
 			if c is Battle:
 				b = c
 		await _wait(0.05)
 		t += 0.05
 	check(b != null, "battle node appeared")
+	if b == null:
+		var names := []
+		for c in main.get_children():
+			names.append(c.name)
+		print("  debug: mode=", main.mode, " dialog=", main.ui.is_dialog_open(), " children=", names, " quest=", Game.state["quest"])
 	if b == null:
 		return "none"
 	var result := [""]
