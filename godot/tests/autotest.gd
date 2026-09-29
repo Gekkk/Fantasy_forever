@@ -202,6 +202,11 @@ func after_battle_ok(label: String) -> void:
 
 
 func teleport(pos: Vector3) -> void:
+	# Keep roaming critters still so scripted steps aren't interrupted;
+	# battle steps re-activate the one they want to fight.
+	for c in main.critters:
+		if is_instance_valid(c):
+			c.active = false
 	main.player.position = pos
 	main.follower.position = pos + Vector3(-0.8, 0, 0.8)
 	main._snap_camera()
@@ -273,7 +278,7 @@ func _run() -> void:
 	for i in 4:
 		var c: Critter = null
 		for cc in main.critters:
-			if is_instance_valid(cc) and cc.active:
+			if is_instance_valid(cc):
 				c = cc
 				break
 		if c == null:
@@ -330,7 +335,7 @@ func _run() -> void:
 		guard += 1
 		var g: Critter = null
 		for cc in main.critters:
-			if is_instance_valid(cc) and cc.uid != "" and cc.active:
+			if is_instance_valid(cc) and cc.uid != "":
 				g = cc
 		if g == null:
 			break
@@ -351,7 +356,7 @@ func _run() -> void:
 
 	# A defeat: control must come back at home, healed.
 	for cc in main.critters:
-		if is_instance_valid(cc) and cc.active:
+		if is_instance_valid(cc):
 			Game.state["hp"] = 1
 			await teleport(cc.position + Vector3(0, 0, 2))
 			main.start_encounter(cc, false)
