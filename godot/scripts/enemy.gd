@@ -199,6 +199,11 @@ func _think(delta: float, p: Player, to_p: Vector3, dist: float) -> void:
 	var cfg: Array = BEHAVIOR[behavior]
 	match state:
 		"wander":
+			# Spawned already angry (boss minions, arena waves): go straight for you.
+			if aggro:
+				state = "chase"
+				_st = 0.0
+				return
 			if _wait > 0.0:
 				_wait -= delta
 				model.moving = false

@@ -11,6 +11,7 @@ var _style := "witch"
 var _robe := 0
 var _hair := 0
 var _name: LineEdit
+var _last_prompt := -10000
 var _continue: Button
 var _start: Button
 var _style_buttons := {}
@@ -103,7 +104,7 @@ func _ready() -> void:
 	_name.text_submitted.connect(func(_t): _on_start())
 	nr.add_child(_name)
 	var clear := Button.new()
-	clear.text = "✕"
+	clear.text = "×"
 	clear.custom_minimum_size = Vector2(54, 54)
 	clear.focus_mode = Control.FOCUS_NONE
 	clear.pressed.connect(func():
@@ -198,6 +199,9 @@ func _use_native_prompt() -> bool:
 
 
 func _ask_name() -> void:
+	# One tap arrives as both a touch and an emulated click: only ask once.
+	if Time.get_ticks_msec() - _last_prompt < 800:
+		return
 	var cur := _name.text.replace("\\", "").replace("'", "\\'")
 	var r = JavaScriptBridge.eval("(function(){var n = window.prompt('What is your name?', '%s'); return n === null ? '' : n;})()" % cur)
 	var n := String(r if r != null else "").strip_edges().left(12)
@@ -205,6 +209,7 @@ func _ask_name() -> void:
 		_name.text = n
 	elif _name.text == "":
 		_name.text = Game.DEFAULT_NAME
+	_last_prompt = Time.get_ticks_msec()
 
 
 func _on_start() -> void:
