@@ -9,7 +9,7 @@ const ATTRS := ["str", "int", "vit", "agi", "luk"]
 const ATTR_INFO := {
 	"str": {"name": "Strength", "icon": "str", "desc": "+2 wand power"},
 	"int": {"name": "Intellect", "icon": "int", "desc": "+2.5 spell power, +4 max MP"},
-	"vit": {"name": "Vitality", "icon": "vit", "desc": "+12 max HP, +1 defense"},
+	"vit": {"name": "Vitality", "icon": "vit", "desc": "+10 max HP, +1 defense"},
 	"agi": {"name": "Agility", "icon": "agi", "desc": "Faster moves, swings and dashes"},
 	"luk": {"name": "Luck", "icon": "luk", "desc": "+1% critical hits, better loot"},
 }
@@ -77,7 +77,7 @@ const BASES := {
 	"charm": [["Lucky Button", 1], ["Clover Charm", 3], ["Pearl Pendant", 5], ["Star Locket", 8]],
 }
 ## Built-in stats per item level.
-const MAIN := {"wand": {"atk": 1.6, "matk": 1.6}, "hat": {"matk": 1.2, "def": 0.8}, "robe": {"hp": 7.0, "def": 1.2}, "charm": {"mp": 2.5}}
+const MAIN := {"wand": {"atk": 1.6, "matk": 1.6}, "hat": {"matk": 1.2, "def": 0.6}, "robe": {"hp": 4.0, "def": 0.9}, "charm": {"mp": 2.5}}
 const AFFIXES := {
 	"str": {"per": 0.55, "fmt": "+%d Strength", "tag": "Mighty"},
 	"int": {"per": 0.55, "fmt": "+%d Intellect", "tag": "Wise"},
@@ -86,7 +86,7 @@ const AFFIXES := {
 	"luk": {"per": 0.55, "fmt": "+%d Luck", "tag": "Lucky"},
 	"atk": {"per": 1.1, "fmt": "+%d Wand Power", "tag": "Sharp"},
 	"matk": {"per": 1.1, "fmt": "+%d Spell Power", "tag": "Arcane"},
-	"hp": {"per": 5.5, "fmt": "+%d Max HP", "tag": "Hearty"},
+	"hp": {"per": 3.5, "fmt": "+%d Max HP", "tag": "Hearty"},
 	"mp": {"per": 1.8, "fmt": "+%d Max MP", "tag": "Dreamy"},
 	"def": {"per": 0.8, "fmt": "+%d Defense", "tag": "Guarded"},
 	"crit": {"per": 0.7, "fmt": "+%d%% Critical Hit", "tag": "Keen", "cap": 15},
@@ -411,8 +411,6 @@ static func item_lines(it: Dictionary) -> Array:
 	var out: Array = []
 	for k in it["stats"]:
 		var v := int(it["stats"][k])
-		if MAIN.get(it["slot"], {}).has(k) and not AFFIXES.has(k):
-			continue
 		var fmt: String = AFFIXES[k]["fmt"] if AFFIXES.has(k) else "+%d " + k
 		out.append(fmt % v)
 	return out
@@ -459,7 +457,7 @@ static func recalc() -> void:
 	var at := {}
 	for a in ATTRS:
 		at[a] = int(st["attr"][a]) + int(eq.get(a, 0))
-	st["max_hp"] = int(b["hp"]) + 12 * int(at["vit"]) + int(eq.get("hp", 0)) + 25 * rank("big_heart")
+	st["max_hp"] = int(b["hp"]) + 10 * int(at["vit"]) + int(eq.get("hp", 0)) + 25 * rank("big_heart")
 	st["max_mp"] = int(b["mp"]) + 4 * int(at["int"]) + int(eq.get("mp", 0)) + 8 * rank("deep_pockets")
 	st["atk"] = int(b["atk"]) + 2 * int(at["str"]) + int(eq.get("atk", 0))
 	_d = {

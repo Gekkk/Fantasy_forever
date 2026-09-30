@@ -672,7 +672,8 @@ func _velour() -> void:
 		# New stock every chapter.
 		shop = {"quest": q(), "items": []}
 		for i in 4:
-			shop["items"].append(Rpg.random_item(int(Game.state["level"]) + 1, 0.4, 1 + int(i == 3)))
+			# One of each: wand, hat, robe and charm.
+			shop["items"].append(Rpg.make_item(Rpg.SLOTS[i], int(Game.state["level"]) + 1, maxi(1 + int(i == 3), Rpg.roll_rarity(0.4))))
 		Game.state["shop"] = shop
 	while true:
 		var items: Array = shop["items"]

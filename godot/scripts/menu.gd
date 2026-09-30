@@ -169,11 +169,7 @@ func _item_row(it: Dictionary, actions: Array) -> void:
 	var rar: Dictionary = Rpg.RARITY[int(it["rarity"])]
 	var title := UI.label("%s   (%s %s, item level %d)" % [it["name"], rar["name"], Rpg.SLOT_NAMES[it["slot"]], it["ilvl"]], 21, (rar["color"] as Color).darkened(0.25))
 	col.add_child(title)
-	var main := []
-	for k in Rpg.MAIN[it["slot"]]:
-		if it["stats"].has(k):
-			main.append({"atk": "+%d Wand Power", "matk": "+%d Spell Power", "hp": "+%d HP", "def": "+%d Defense", "mp": "+%d MP"}[k] % int(it["stats"][k]))
-	var lines: Array = main + Rpg.item_lines(it)
+	var lines: Array = Rpg.item_lines(it)
 	var stats := _wide(", ".join(lines), 18, Color("6a5a88"))
 	col.add_child(stats)
 	for a in actions:
