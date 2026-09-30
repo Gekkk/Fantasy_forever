@@ -1,5 +1,5 @@
 extends Node
-## Focused check: losing a battle wakes you up at home, healed, able to move.
+## Focused check: getting knocked out wakes you up at home, healed, able to move.
 
 func _ready() -> void:
 	_run.call_deferred()
@@ -11,30 +11,18 @@ func _run() -> void:
 	await get_tree().create_timer(1.0).timeout
 	main.title.visible = false
 	Game.new_game("Luna", "witch", 0, 0)
-	await main.load_map("city", Vector3(-10, 0, 8), false)
+	await main.load_map("city", Vector3(-20, 0, 10), false)
 	main.mode = main.Mode.EXPLORE
-	for c in main.critters:
-		c.active = false
-	Game.state["hp"] = 1
-	main.run_script(func(): await main.battle(["bee"], "park"))
-	var b: Battle = null
-	while b == null:
-		await get_tree().create_timer(0.2).timeout
-		for c in main.get_children():
-			if c is Battle:
-				b = c
-	while not b._cmd_panel.visible:
-		await get_tree().create_timer(0.2).timeout
-	b._command_chosen.emit({"type": "guard"})
+	main.combat.spawn_enemy("bee", Vector3(-19, 0, 10), Rect2(-38, 4, 28, 12.5), "", true)
 	var t := 0.0
-	while t < 120.0 and main.mode != main.Mode.EXPLORE:
+	while t < 60.0 and main.world.map_id != "home_in":
+		# Stay at 1 HP (Mochi likes to heal you!).
+		Game.state["hp"] = mini(int(Game.state["hp"]), 1)
+		await get_tree().create_timer(0.1).timeout
+		t += 0.1
+	while t < 60.0 and main.mode != main.Mode.EXPLORE:
 		if main.ui.is_dialog_open():
 			main.ui._advance()
-		# Stay at 1 HP (Mochi likes to heal you!) and never time the guard.
-		if is_instance_valid(b) and not b._over and Game.state["hp"] > 1:
-			Game.state["hp"] = 1
-		if is_instance_valid(b) and b._cmd_panel.visible:
-			b._command_chosen.emit({"type": "guard"})
 		await get_tree().create_timer(0.2).timeout
 		t += 0.2
 	print("RESULT map=", main.world.map_id, " hp=", Game.state["hp"], "/", Game.state["max_hp"], " mode=", main.mode)

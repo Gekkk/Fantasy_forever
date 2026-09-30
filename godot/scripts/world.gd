@@ -415,19 +415,60 @@ func _build_city() -> void:
 	add_interactable("library", Vector3(-32, 0, -8.2), 1.7, "Enter the Moonlight Library")
 	add_interactable("boutique", Vector3(31, 0, -8.2), 1.7, "Enter Velour's Boutique")
 	add_interactable("tower_door", Vector3(15, 0, -9.1), 1.4, "", true)
-	if Game.state["quest"] == 2:
+	if Game.state["quest"] == 4:
 		spawn_badge(Vector3(-18, 0, 12))
+	_side_collectibles()
 
 	critter_spawns = []
 	var west := Rect2(-38, 4, 28, 12.5)
 	var east := Rect2(10.5, 4, 27, 12.5)
 	var meadow := Rect2(-36, 23, 72, 5)
-	for i in 4:
+	for i in 5:
 		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-36, -12), 0, randf_range(5, 15)), "area": west})
-	for i in 3:
+	for i in 4:
 		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(12, 36), 0, randf_range(5, 15)), "area": east})
-	for i in 3:
+	for i in 4:
 		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-34, 34), 0, randf_range(23.5, 27.5)), "area": meadow})
+
+
+const BOOK_SPOTS := [Vector3(-27, 0, 2.2), Vector3(20, 0, -5.4), Vector3(-2, 0, 18.5), Vector3(33, 0, 21)]
+const YARN_SPOTS := [Vector3(-38, 0, 10), Vector3(-6, 0, 25.5), Vector3(26, 0, 4.5), Vector3(38, 0, 26), Vector3(-19, 0, 0.9)]
+const PEARL_SPOT := Vector3(-22, 0, 19.2)
+
+
+## Side-quest items appear only while their quest is active.
+func _side_collectibles() -> void:
+	if map_id != "city":
+		return
+	if Game.side_state("books") == "active":
+		for i in BOOK_SPOTS.size():
+			_collectible("book_%d" % i, BOOK_SPOTS[i], "book")
+	if Game.side_state("yarn") == "active":
+		for i in YARN_SPOTS.size():
+			_collectible("yarn_%d" % i, YARN_SPOTS[i], "yarn")
+	if Game.side_state("pearl") == "active":
+		_collectible("pearl_0", PEARL_SPOT, "pearl")
+
+
+func _collectible(cid: String, pos: Vector3, kind: String) -> void:
+	if Game.state["collected"].has(cid) or has_node("Col_" + cid):
+		return
+	var n := Art.node(self, "Col_" + cid, pos + Vector3(0, 0.9, 0))
+	match kind:
+		"book":
+			Art.part(n, Art.box(Vector3(0.45, 0.6, 0.14)), [Color("ff8fb8"), Color("7cc8ff"), Color("ffd36b"), Color("9fffb8")][absi(cid.hash()) % 4], Vector3.ZERO, Vector3(10, 0, 15), Vector3.ONE, 0.8)
+			for s in [-1, 1]:
+				Art.part(n, Art.sphere(0.2), Color(1, 1, 1, 0.7), Vector3(0.3 * s, 0.1, 0), Vector3(0, 0, 30 * s), Vector3(1.2, 0.5, 0.1), 0.6, false)
+		"yarn":
+			Art.part(n, Art.sphere(0.28), [Color("ff9fc4"), Color("c3a6ff"), Color("8fe0c8"), Color("ffd36b"), Color("7cc8ff")][absi(cid.hash()) % 5], Vector3.ZERO, Vector3.ZERO, Vector3.ONE, 0.3)
+			Art.part(n, Art.torus(0.25, 0.3), Color.WHITE, Vector3.ZERO, Vector3(60, 20, 0), Vector3.ONE, 0.2, false)
+		"pearl":
+			Art.part(n, Art.sphere(0.4, true), Color("f5c7e0"), Vector3(0, -0.2, 0), Vector3(180, 0, 0), Vector3(1, 0.5, 1))
+			Art.part(n, Art.sphere(0.16), Color("fffaf0"), Vector3(0, -0.05, 0), Vector3.ZERO, Vector3.ONE, 2.0)
+	Art.ambient(n, Vector3.ZERO, Vector3(0.3, 0.3, 0.3), Color("fff3b0"), 8, "sparkle", 0.2, 1.2)
+	floater(n, 0.2)
+	spinner(n, 50)
+	add_interactable("col_" + cid, pos, 1.2, "", true)
 
 
 func _water_disc(c: Vector3, r: float) -> void:
@@ -759,7 +800,7 @@ func _build_tower() -> void:
 	for x in [-2.6, 2.6]:
 		Art.part(self, Art.cyl(0.35, 0.4, 3.2), Color("8f78d0"), Vector3(x, 1.6, -6))
 		Art.part(self, Art.sphere(0.3), Color("c9a6ff"), Vector3(x, 3.5, -6), Vector3.ZERO, Vector3.ONE, 2.0)
-	if Game.state["quest"] < 5:
+	if Game.state["quest"] < 7:
 		var ward := Art.part(self, Art.box(Vector3(4.8, 3.2, 0.2)), Color(0.75, 0.45, 1.0, 0.45), Vector3(0, 1.6, -6), Vector3.ZERO, Vector3.ONE, 1.2, false)
 		ward.name = "Ward"
 		Art.ambient(self, Vector3(0, 1.6, -6), Vector3(2.3, 1.5, 0.2), Color("e0b8ff"), 30, "sparkle", 0.22, 1.5)
@@ -816,9 +857,12 @@ func _build_tower() -> void:
 	var gremlin_types := ["paper", "coffee", "printer"]
 	for i in 3:
 		var uid := "g%d" % (i + 1)
-		if not Game.flag("beat_" + uid):
-			critter_spawns.append({"id": gremlin_types[i], "pos": Vector3(-7 + i * 7, 0, -0.5 + (i % 2) * 2), "area": office, "uid": uid})
-	critter_spawns.append({"id": Game.OFFICE_POOL.pick_random(), "pos": Vector3(0, 0, 4), "area": office})
+		if not Game.flag("beat_" + uid) and Game.state["quest"] >= 5:
+			critter_spawns.append({"id": gremlin_types[i], "pos": Vector3(-7 + i * 7, 0, -0.5 + (i % 2) * 2), "area": office, "uid": uid, "elite": true})
+	for i in 3:
+		critter_spawns.append({"id": Game.OFFICE_POOL.pick_random(), "pos": Vector3(-8 + i * 8, 0, 3.8), "area": office})
+	if Game.state["quest"] == 7:
+		add_interactable("printer_arena", Vector3(0, 0, -3.8), 3.2, "", true)
 
 
 func _desk(p: Vector3) -> void:
@@ -911,7 +955,7 @@ func _build_roof() -> void:
 	Art.part(self, Art.box(Vector3(2.4, 0.2, 1.4)), Color("5a4a8a"), Vector3(0, 0.02, 8.8))
 	Art.label3d(self, "Stairs", Vector3(0, 1.4, 9.2), 48, Color("fff3c4"))
 	add_npc("ghost_roof", Models.ghost(), Vector3(-3.2, 0, 5.5), 160, "Talk to Boo-b")
-	if Game.state["quest"] >= 6:
+	if Game.state["quest"] >= 9:
 		add_npc("clock_friend", Models.tiny_clock(), Vector3(0, 0, -4), 0, "Talk to the Tiny Clock")
 	else:
 		var boss := Models.monday()

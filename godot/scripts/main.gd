@@ -1,7 +1,9 @@
 extends Node
-## Top-level flow: title screen, exploring, battles, cutscenes and saving.
+## Top-level flow: title screen, exploring with real-time combat, cutscenes and saving.
 
 enum Mode { TITLE, EXPLORE, SCRIPT, BATTLE, MENU }
+
+signal _fight_done(result: String)
 
 const CAM_OFFSET := Vector3(0, 11.0, 11.5)
 const MUSIC := {"city": "town", "tower": "tower", "roof": "tower", "home_in": "ending",
@@ -15,7 +17,7 @@ var cam: Camera3D
 var world: World
 var player: Player
 var follower: ModelAnim
-var critters: Array = []
+var combat: Combat
 var ui: UI
 var touch: TouchControls
 var title: Control
@@ -25,8 +27,14 @@ var story: Story
 var _auto_inside := {}
 var _nearest := {}
 var _cooldown := 0.0
-var _swing_cd := 0.0
 var _title_t := 0.0
+var _shake := 0.0
+var _in_fight := false
+var _fight_target: Enemy
+var _perk_showing := false
+var _mochi_cd := 2.0
+var _mochi_heal_cd := 0.0
+var _mochi_busy := false
 var _autotest := false
 
 
@@ -61,6 +69,8 @@ func _ready() -> void:
 	_setup_quality()
 	get_viewport().size_changed.connect(_update_render_scale)
 
+	combat = Combat.new(self)
+	add_child(combat)
 	ui = UI.new()
 	add_child(ui)
 	touch = TouchControls.new()
@@ -68,6 +78,8 @@ func _ready() -> void:
 	ui.add_child(touch)
 	ui.menu_button.pressed.connect(open_menu)
 	story = Story.new(self)
+	combat.enemy_calmed.connect(_on_enemy_calmed_for_fight)
+	combat.arena_cleared.connect(_on_arena_cleared)
 
 	title = TitleScreen.new()
 	ui.add_child(title)
@@ -196,10 +208,8 @@ func _enter_game(is_new: bool) -> void:
 func _load_world(id: String) -> void:
 	if world:
 		world.queue_free()
-	for c in critters:
-		if is_instance_valid(c):
-			c.queue_free()
-	critters.clear()
+	if combat:
+		combat.clear()
 	_auto_inside.clear()
 	world = World.new()
 	world.name = "World"
@@ -215,11 +225,12 @@ func load_map(id: String, spawn: Vector3, fade := true) -> void:
 	player = Player.new()
 	world.add_child(player)
 	player.position = spawn
+	player.downed.connect(_on_player_down)
 	follower = Models.cat()
 	world.add_child(follower)
 	follower.position = spawn + Vector3(-0.8, 0, 0.8)
 	for s in world.critter_spawns:
-		_spawn_critter(s)
+		combat.spawn_enemy(s["id"], s["pos"], s["area"], s.get("uid", ""), false, s.get("elite", false))
 	Game.state["map"] = id
 	Game.state["pos"] = [spawn.x, spawn.z]
 	refresh_markers()
@@ -228,18 +239,6 @@ func load_map(id: String, spawn: Vector3, fade := true) -> void:
 	Game.save_game()
 	if fade:
 		await ui.fade_in(0.35)
-
-
-func _spawn_critter(s: Dictionary) -> void:
-	var c := Critter.new()
-	c.enemy_id = s["id"]
-	c.area = s["area"]
-	c.uid = s.get("uid", "")
-	c.player = player
-	c.position = s["pos"]
-	world.add_child(c)
-	c.touched.connect(_on_critter_touched)
-	critters.append(c)
 
 
 func _apply_env(p: Dictionary) -> void:
@@ -286,19 +285,28 @@ func _process(delta: float) -> void:
 			cam.position = focus + Vector3(2.2 + sin(_title_t * 0.3) * 0.4, 1.2, 5.5)
 			cam.look_at(focus)
 		return
-	if mode == Mode.BATTLE or world == null or player == null:
+	if world == null or player == null:
 		return
 	_cooldown = maxf(0.0, _cooldown - delta)
-	_swing_cd = maxf(0.0, _swing_cd - delta)
 	var t := _cam_target()
 	cam.position = cam.position.lerp(t + CAM_OFFSET * world.cam_zoom, minf(1.0, 5.0 * delta))
 	cam.look_at(cam.position - CAM_OFFSET * world.cam_zoom + Vector3(0, 0.6, 0))
+	if _shake > 0.0:
+		_shake = maxf(0.0, _shake - delta * 2.5)
+		cam.position += Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * _shake * 0.35
 	_update_follower(delta)
 	player.can_move = mode == Mode.EXPLORE
+	ui.update_combat(player)
 	if mode != Mode.EXPLORE:
 		ui.show_prompt("")
 		return
+	if int(Game.state.get("pending_perks", 0)) > 0 and not _perk_showing:
+		_show_perk_choice()
+		return
 	_nearest = {}
+	if _in_fight:
+		ui.show_prompt("")
+		return
 	var best := 1e9
 	for it in world.interactables:
 		var d := Vector2(player.position.x - it["pos"].x, player.position.z - it["pos"].z).length()
@@ -314,23 +322,47 @@ func _process(delta: float) -> void:
 		if d < it["radius"] and d < best:
 			best = d
 			_nearest = it
-	if _nearest.is_empty() and follower and not _critter_in_front():
+	if _nearest.is_empty() and follower and not combat.any_aggro_near(player.position, 8.0):
 		var to_cat := follower.position - player.position
 		to_cat.y = 0
-		if to_cat.length() < 1.5 and _forward().dot(to_cat.normalized()) > 0.5:
+		if to_cat.length() < 1.5 and player.facing().dot(to_cat.normalized()) > 0.5:
 			_nearest = {"id": "mochi", "prompt": "Talk to Mochi", "pos": follower.position}
+	if not _nearest.is_empty() and combat.any_aggro_near(player.position, 6.0):
+		_nearest = {}
 	ui.show_prompt(_nearest.get("prompt", ""))
+
+
+func shake(amount: float) -> void:
+	_shake = maxf(_shake, amount)
+
+
+## A tiny freeze-frame that makes big hits feel punchy.
+func hitstop(sec: float) -> void:
+	Engine.time_scale = 0.08
+	await get_tree().create_timer(sec, true, false, true).timeout
+	Engine.time_scale = 1.0
 
 
 func _update_follower(delta: float) -> void:
 	if follower == null:
 		return
-	var back := player.position - Vector3(sin(player.model.rotation.y), 0, cos(player.model.rotation.y)) * 1.2
+	_mochi_cd -= delta
+	_mochi_heal_cd -= delta
+	if mode == Mode.EXPLORE and not _mochi_busy:
+		if _mochi_heal_cd <= 0.0 and Game.state["hp"] < Game.state["max_hp"] * 0.35 and Game.state["hp"] > 0:
+			_mochi_heal()
+		elif _mochi_cd <= 0.0:
+			var e := combat.nearest_enemy(player.position, 7.0)
+			if e and e.aggro:
+				_mochi_pounce(e)
+	if _mochi_busy:
+		return
+	var back := player.position - player.facing() * 1.2
 	var to := back - follower.position
 	to.y = 0
 	var dist := to.length()
 	if dist > 0.25:
-		var speed := clampf(dist * 3.0, 0.0, 7.0)
+		var speed := clampf(dist * 3.0, 0.0, 7.5)
 		follower.position += to.normalized() * minf(speed * delta, dist)
 		follower.rotation.y = lerp_angle(follower.rotation.y, atan2(to.x, to.z), minf(1.0, 10.0 * delta))
 	follower.moving = dist > 0.35
@@ -338,23 +370,50 @@ func _update_follower(delta: float) -> void:
 		follower.position = back
 
 
+func _mochi_pounce(e: Enemy) -> void:
+	_mochi_busy = true
+	_mochi_cd = 3.2 * pow(0.7, Game.perk("mochi_power"))
+	var start := follower.position
+	var target := e.global_position + (start - e.global_position).normalized() * 0.8
+	Audio.sfx("meow", 0.15, -4.0)
+	follower.look_at(Vector3(e.global_position.x, follower.position.y, e.global_position.z), Vector3.UP, true)
+	var tw := create_tween()
+	tw.tween_property(follower, "position", target + Vector3(0, 0.6, 0), 0.18)
+	tw.tween_property(follower, "position", target, 0.08)
+	await tw.finished
+	if is_instance_valid(e) and not e.dead:
+		var dmg := int((5 + int(Game.state["level"]) * 2) * (1.0 + 0.5 * Game.perk("mochi_power")))
+		e.take_damage(dmg, "none", e.global_position - follower.position, "")
+		Art.burst(world, e.global_position + Vector3(0, 0.8, 0), Color("ffe0f0"), 8, "sparkle", 2, 0.4, 0.3)
+	await get_tree().create_timer(0.25).timeout
+	_mochi_busy = false
+
+
+func _mochi_heal() -> void:
+	_mochi_heal_cd = 18.0
+	var amt := int(Game.state["max_hp"] * 0.15) + 5
+	Game.heal(amt)
+	Audio.sfx("purr")
+	Art.burst(world, player.position + Vector3(0, 0.6, 0), Color("ff9fc4"), 14, "heart", 1.5, 1.2, 0.3, Vector3(0, 1.5, 0))
+	Art.float_text(world, follower.position + Vector3(0, 1.2, 0), "Purr~ +%d" % amt, Color("ffb3d9"), 60)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if mode == Mode.EXPLORE and _cooldown <= 0.0:
 		if event.is_action_pressed("confirm"):
 			get_viewport().set_input_as_handled()
-			if _critter_in_front() or _nearest.is_empty():
-				_wand_swing()
+			if _nearest.is_empty():
+				player.attack()
 			else:
 				interact(_nearest["id"])
-		elif event.is_action_pressed("cancel"):
+		elif event.is_action_pressed("cancel") and not _in_fight:
 			get_viewport().set_input_as_handled()
 			open_menu()
 	elif mode == Mode.MENU and event.is_action_pressed("cancel"):
 		get_viewport().set_input_as_handled()
 		close_menu()
 	elif event.is_action_pressed("confirm") and not ui.is_dialog_open():
-		# The A button / Z / E press whichever button is highlighted on any
-		# screen (results, ending, menus), not only Enter and Space.
+		# The A button / E press whichever button is highlighted on any screen.
 		var f := get_viewport().gui_get_focus_owner()
 		if f is BaseButton and f.is_visible_in_tree() and not (f as BaseButton).disabled:
 			get_viewport().set_input_as_handled()
@@ -362,7 +421,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func interact(id: String) -> void:
-	if mode != Mode.EXPLORE:
+	if mode != Mode.EXPLORE or _in_fight:
 		return
 	if world.npcs.has(id):
 		var npc: Node3D = world.npcs[id]
@@ -390,123 +449,87 @@ func run_script(fn: Callable) -> void:
 		Game.save_game()
 
 
-func _forward() -> Vector3:
-	return Vector3(sin(player.model.rotation.y), 0, cos(player.model.rotation.y))
-
-
-func _critter_in_front() -> Critter:
-	var fwd := _forward()
-	for c in critters:
-		if not is_instance_valid(c) or not c.active:
-			continue
-		var to: Vector3 = c.position - player.position
-		to.y = 0
-		if to.length() < 2.2 and fwd.dot(to.normalized()) > 0.3:
-			return c
-	return null
-
-
-func _wand_swing() -> void:
-	if _swing_cd > 0.0:
-		return
-	_swing_cd = 0.45
-	Audio.sfx("swing", 0.1)
-	var fwd := Vector3(sin(player.model.rotation.y), 0, cos(player.model.rotation.y))
-	Art.burst(world, player.position + fwd * 0.9 + Vector3(0, 0.9, 0), Color("fff3b0"), 10, "sparkle", 2.0, 0.5, 0.25, Vector3.ZERO)
-	var arm: Node3D = player.model.find_child("ArmR", true, false)
-	if arm:
-		var tw := create_tween()
-		tw.tween_property(arm, "rotation:x", -2.2, 0.08)
-		tw.tween_property(arm, "rotation:x", 0.0, 0.18)
-	var c := _critter_in_front()
-	if c:
-		c.active = false
-		start_encounter(c, true)
-
-
-# ============================================================== battles
-func _on_critter_touched(c: Critter) -> void:
-	if mode != Mode.EXPLORE:
-		c.active = true
-		return
-	start_encounter(c, false)
-
-
-func start_encounter(c: Critter, strike: bool) -> void:
-	var ids: Array = [c.enemy_id]
-	var pool: Array = Game.PARK_POOL if world.map_id == "city" else Game.OFFICE_POOL
-	var lvl := int(Game.state["level"])
-	var extra := 0
-	if lvl >= 2:
-		extra = randi_range(0, mini(2, lvl - 1))
-	for i in extra:
-		ids.append(pool.pick_random())
-	var area := "park" if world.map_id == "city" else "office"
-	run_script(func():
-		var result: String = await battle(ids, area, strike)
-		if result == "win":
-			if c.uid != "":
-				Game.set_flag("beat_" + c.uid)
-			critters.erase(c)
-			c.queue_free()
-			await story.after_battle(c.uid)
-		elif is_instance_valid(c):
-			c.active = true)
-
-
-## Plays a whole battle and returns "win", "lose" or "flee".
-func battle(ids: Array, area: String, strike := false) -> String:
-	mode = Mode.BATTLE
-	player.can_move = false
-	ui.show_prompt("")
-	touch.set_joystick(false)
-	Audio.sfx("encounter")
-	Audio.play_music("boss" if ids.has("monday") else "battle", 0.4)
-	await ui.fade_out(0.45)
-	world.visible = false
-	world.process_mode = Node.PROCESS_MODE_DISABLED
-	ui.show_hud(false)
-	var b := Battle.new()
-	b.setup(ids, area, strike)
-	add_child(b)
-	await ui.fade_in(0.35)
-	var result: String = await b.finished
-	await ui.fade_out(0.4)
-	b.queue_free()
-	world.visible = true
-	world.process_mode = Node.PROCESS_MODE_INHERIT
-	cam.current = true
-	ui.show_hud(true)
-	ui.refresh()
+# =============================================================== fights
+## Lets the player fight in real time from inside a story script.
+## Returns "win" when `target` is cheered up (or the arena is cleared), "lose" if knocked out.
+func fight(target: Enemy = null) -> String:
+	_in_fight = true
+	_fight_target = target
+	mode = Mode.EXPLORE
+	touch.set_joystick(true)
+	Audio.play_music("boss" if target and target is Boss else "battle", 0.5)
+	if target:
+		target.aggro = true
+	var result: String = await _fight_done
+	_in_fight = false
+	_fight_target = null
 	mode = Mode.SCRIPT
-	if result == "lose":
-		Game.full_heal()
-		var bedside := Vector3(-2.2, 0, -1.2)
-		if world.map_id != "home_in":
-			await load_map("home_in", bedside, false)
-		else:
-			player.position = bedside
-		_snap_camera()
-		Audio.play_music(MUSIC.get(world.map_id, "town"), 0.5)
-		await ui.fade_in(0.5)
-		await ui.say("Mochi", "Mrrow. You dozed off out there, so I dragged you home. You're welcome. (HP and MP restored!)")
-	else:
-		Audio.play_music(MUSIC.get(world.map_id, "town"), 0.8)
-		await ui.fade_in(0.4)
-		_invulnerable(2.0)
-	Game.save_game()
+	player.can_move = false
+	if result == "win":
+		Audio.play_music("victory", 0.2)
+		await get_tree().create_timer(2.5).timeout
+		Audio.play_music(MUSIC.get(world.map_id, "town"), 1.0)
 	return result
 
 
-func _invulnerable(sec: float) -> void:
-	player.set_meta("invulnerable", true)
-	var tw := create_tween().set_loops(int(sec / 0.2))
-	tw.tween_property(player.model, "visible", false, 0.1)
-	tw.tween_property(player.model, "visible", true, 0.1)
-	await get_tree().create_timer(sec).timeout
-	if is_instance_valid(player):
-		player.set_meta("invulnerable", false)
-		player.model.visible = true
+## Arena version: a barrier locks you in with waves of critters.
+func fight_arena(center: Vector3, radius: float, waves: Array) -> String:
+	combat.start_arena(center, radius, waves)
+	return await fight(null)
+
+
+func _on_enemy_calmed_for_fight(e: Enemy) -> void:
+	if _in_fight and _fight_target != null and e == _fight_target:
+		_fight_done.emit("win")
+
+
+func _on_arena_cleared() -> void:
+	if _in_fight and _fight_target == null:
+		_fight_done.emit("win")
+
+
+func _on_player_down() -> void:
+	combat.end_arena(false)
+	if _in_fight:
+		_fight_done.emit("lose")
+		await get_tree().process_frame
+		await _wake_up_at_home()
+	else:
+		run_script(_wake_up_at_home)
+
+
+func _wake_up_at_home() -> void:
+	mode = Mode.SCRIPT
+	await get_tree().create_timer(1.0).timeout
+	await ui.fade_out(0.6)
+	Game.full_heal()
+	ui.boss_bar("", 0.0, "", false)
+	var bedside := Vector3(-2.2, 0, -1.2)
+	await load_map("home_in", bedside, false)
+	Audio.play_music(MUSIC.get(world.map_id, "town"), 0.5)
+	await ui.fade_in(0.6)
+	await ui.say("Mochi", "Mrrow. You dozed off out there, so I dragged you home. You're welcome. (HP and MP restored!)")
+
+
+# =============================================================== perks
+func queue_perk_choice() -> void:
+	pass # picked up in _process once it's safe to pause
+
+
+func _show_perk_choice() -> void:
+	_perk_showing = true
+	get_tree().paused = true
+	var choices := Game.perk_choices()
+	if choices.is_empty():
+		Game.state["pending_perks"] = 0
+	else:
+		var id: String = await ui.choose_perk(choices)
+		Game.add_perk(id)
+		Game.state["pending_perks"] = maxi(0, int(Game.state["pending_perks"]) - 1)
+		Art.burst(world, player.position + Vector3(0, 1, 0), Color("ffe27a"), 30, "star", 4, 1.0, 0.35)
+	get_tree().paused = false
+	_perk_showing = false
+	Game.save_game()
 
 
 # ================================================================= menu

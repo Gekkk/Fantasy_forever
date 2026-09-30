@@ -9,7 +9,7 @@ const LOVE_NOTE := "Thank you for being my favorite adventurer.\nOn Mondays and 
 
 signal stats_changed
 
-const SAVE_PATH := "user://fantasy_forever_save.json"
+const SAVE_PATH := "user://fantasy_forever_save_v2.json"
 
 const STYLES := ["witch", "fairy", "elf"]
 const STYLE_NAMES := {"witch": "Witch", "fairy": "Fairy", "elf": "Elf"}
@@ -19,68 +19,107 @@ const HAIR_COLORS := [Color("6b4a3a"), Color("f5d47a"), Color("ff9fc4"), Color("
 const ELEMENT_NAMES := {"fire": "Fire", "ice": "Ice", "arcane": "Sparkle"}
 const ELEMENT_COLORS := {"fire": Color("ff8a4c"), "ice": Color("7cc8ff"), "arcane": Color("ff8fd8"), "none": Color("ffffff")}
 
-# Spells the hero can learn. power multiplies attack.
-const SPELLS := {
-	"sparkle": {"name": "Sparkle Burst", "mp": 3, "power": 1.5, "element": "arcane", "target": "one",
-		"desc": "A burst of pink stars."},
-	"flame": {"name": "Flame Petal", "mp": 4, "power": 1.7, "element": "fire", "target": "one",
-		"desc": "Warm, fiery flower petals."},
-	"frost": {"name": "Frost Bloom", "mp": 4, "power": 1.7, "element": "ice", "target": "one",
-		"desc": "A blooming crystal of ice."},
-	"heal": {"name": "Heal Glow", "mp": 4, "power": 0.0, "element": "none", "target": "self",
-		"desc": "Restores lots of HP."},
-	"starfall": {"name": "Starfall", "mp": 9, "power": 1.3, "element": "arcane", "target": "all",
-		"desc": "Stars rain on every enemy."},
+# Real-time skills. Slot order = button order.
+const SKILL_ORDER := ["flame", "frost", "heal", "starfall"]
+const SKILLS := {
+	"flame": {"name": "Flame Petal", "mp": 5, "cd": 2.2, "element": "fire", "icon": "fire",
+		"desc": "Throw three fiery petals. Burns critters over time."},
+	"frost": {"name": "Frost Bloom", "mp": 6, "cd": 5.0, "element": "ice", "icon": "ice",
+		"desc": "An icy ring around you. Freezes critters in place."},
+	"heal": {"name": "Heal Glow", "mp": 8, "cd": 9.0, "element": "none", "icon": "hp",
+		"desc": "Restore a big chunk of HP."},
+	"starfall": {"name": "Starfall", "mp": 14, "cd": 12.0, "element": "arcane", "icon": "star_gold",
+		"desc": "Stars rain on every critter nearby and stun them."},
 }
 
 const ITEMS := {
-	"muffin": {"name": "Pumpkin Muffin", "desc": "Restores 40 HP.", "price": 8, "icon": "muffin"},
-	"tea": {"name": "Moon Tea", "desc": "Restores 12 MP.", "price": 10, "icon": "tea"},
+	"muffin": {"name": "Pumpkin Muffin", "desc": "Restores 50 HP. (Menu or H key)", "price": 8, "icon": "muffin"},
+	"tea": {"name": "Moon Tea", "desc": "Restores 15 MP. (Menu or T key)", "price": 10, "icon": "tea"},
 }
 
-# Enemy moves: p = power (x atk), charge = telegraphed a turn ahead, drain = MP stolen.
+# Enemy behaviors: melee (lunge), charger (dash line), shooter (projectiles),
+# bomber (marks your spot, then bursts), spinner (area around itself).
 const ENEMIES := {
-	"cloud": {"name": "Grumpy Cloud", "hp": 26, "atk": 6, "xp": 9, "coins": 4, "weak": "fire", "area": "park",
-		"moves": [{"n": "Drizzle", "p": 1.0}, {"n": "Thunder Tickle", "p": 2.0, "charge": true}],
-		"calm": "rains a tiny rainbow and floats away happy!"},
-	"shroom": {"name": "Sleepy Mushroom", "hp": 22, "atk": 5, "xp": 8, "coins": 3, "weak": "fire", "area": "park",
-		"moves": [{"n": "Spore Sneeze", "p": 1.0}, {"n": "Mega Yawn", "p": 0.4, "drain": 3}],
-		"calm": "curls up for a peaceful nap."},
-	"pigeon": {"name": "Pigeon of Doom", "hp": 18, "atk": 7, "xp": 8, "coins": 5, "weak": "ice", "area": "park",
-		"moves": [{"n": "Peck", "p": 1.0}, {"n": "Sandwich Heist", "p": 0.8}],
-		"calm": "coos softly and does a happy dance."},
-	"umbrella": {"name": "Lost Umbrella", "hp": 30, "atk": 5, "xp": 10, "coins": 5, "weak": "arcane", "area": "park",
-		"moves": [{"n": "Pointy Poke", "p": 1.0}, {"n": "Spin Splash", "p": 1.3}],
-		"calm": "hops off to find its owner."},
-	"bee": {"name": "Busy Bee", "hp": 20, "atk": 7, "xp": 9, "coins": 4, "weak": "ice", "area": "park",
-		"moves": [{"n": "Stinger Boop", "p": 1.0}, {"n": "Waggle Dance", "p": 2.0, "charge": true}],
-		"calm": "buzzes back to its flower."},
-	"paper": {"name": "Paperwork Imp", "hp": 38, "atk": 8, "xp": 16, "coins": 7, "weak": "fire", "area": "office",
-		"moves": [{"n": "Papercut", "p": 1.0}, {"n": "Triplicate Form", "p": 2.0, "charge": true}],
-		"calm": "gets signed and flutters away, fulfilled."},
-	"coffee": {"name": "Coffee Slime", "hp": 44, "atk": 8, "xp": 17, "coins": 7, "weak": "ice", "area": "office",
-		"moves": [{"n": "Decaf Splash", "p": 1.0}, {"n": "Caffeine Jitters", "p": 1.3}],
-		"calm": "becomes a lovely iced latte."},
-	"clip": {"name": "Paperclip Poltergeist", "hp": 34, "atk": 10, "xp": 16, "coins": 8, "weak": "arcane", "area": "office",
-		"moves": [{"n": "Clip!", "p": 1.0}, {"n": "Helpful Suggestion", "p": 0.5, "drain": 3}],
-		"calm": "straightens out and feels much better."},
-	"printer": {"name": "Printer Golem", "hp": 50, "atk": 9, "xp": 19, "coins": 9, "weak": "arcane", "area": "office",
-		"moves": [{"n": "Paper Jam", "p": 1.0}, {"n": "PC LOAD LETTER", "p": 2.0, "charge": true}],
-		"calm": "prints you a thank-you card."},
-	"email": {"name": "Reply-All Wraith", "hp": 40, "atk": 9, "xp": 17, "coins": 8, "weak": "fire", "area": "office",
-		"moves": [{"n": "Reply All", "p": 1.0}, {"n": "Surprise Meeting", "p": 0.6, "drain": 4}],
-		"calm": "unsubscribes itself peacefully."},
-	"monday": {"name": "The Monday Monster", "hp": 260, "atk": 11, "xp": 120, "coins": 60, "weak": "ice", "area": "boss",
-		"moves": [{"n": "Snooze Slam", "p": 1.0}, {"n": "Monday Mist", "p": 0.6, "drain": 4},
-			{"n": "RIIIIING!!", "p": 2.2, "charge": true}],
-		"calm": "yawns and turns back into a sleepy little clock."},
+	"cloud": {"name": "Grumpy Cloud", "hp": 40, "dmg": 9, "speed": 2.2, "behavior": "bomber", "weak": "fire",
+		"xp": 8, "coins": 3, "calm": "rains a tiny rainbow and floats away happy!"},
+	"shroom": {"name": "Sleepy Mushroom", "hp": 45, "dmg": 8, "speed": 1.6, "behavior": "spinner", "weak": "fire",
+		"xp": 8, "coins": 3, "calm": "curls up for a peaceful nap."},
+	"pigeon": {"name": "Pigeon of Doom", "hp": 30, "dmg": 8, "speed": 3.0, "behavior": "charger", "weak": "ice",
+		"xp": 7, "coins": 4, "calm": "coos softly and does a happy dance."},
+	"umbrella": {"name": "Lost Umbrella", "hp": 50, "dmg": 9, "speed": 2.4, "behavior": "spinner", "weak": "arcane",
+		"xp": 9, "coins": 4, "calm": "hops off to find its owner."},
+	"bee": {"name": "Busy Bee", "hp": 28, "dmg": 7, "speed": 3.4, "behavior": "melee", "weak": "ice",
+		"xp": 7, "coins": 3, "calm": "buzzes back to its flower."},
+	"paper": {"name": "Paperwork Imp", "hp": 70, "dmg": 12, "speed": 2.4, "behavior": "shooter", "weak": "fire",
+		"xp": 14, "coins": 6, "calm": "gets signed and flutters away, fulfilled."},
+	"coffee": {"name": "Coffee Slime", "hp": 90, "dmg": 12, "speed": 1.8, "behavior": "bomber", "weak": "ice",
+		"xp": 15, "coins": 6, "calm": "becomes a lovely iced latte."},
+	"clip": {"name": "Paperclip Poltergeist", "hp": 60, "dmg": 14, "speed": 3.2, "behavior": "charger", "weak": "arcane",
+		"xp": 14, "coins": 7, "calm": "straightens out and feels much better."},
+	"printer": {"name": "Printer Golem", "hp": 110, "dmg": 13, "speed": 1.6, "behavior": "shooter", "weak": "arcane",
+		"xp": 17, "coins": 8, "calm": "prints you a thank-you card."},
+	"email": {"name": "Reply-All Wraith", "hp": 75, "dmg": 12, "speed": 2.8, "behavior": "melee", "weak": "fire",
+		"xp": 15, "coins": 7, "calm": "unsubscribes itself peacefully."},
+	"tick": {"name": "Tick-Tock", "hp": 35, "dmg": 10, "speed": 3.4, "behavior": "melee", "weak": "ice",
+		"xp": 4, "coins": 1, "calm": "stops ticking and yawns."},
+	"printer_king": {"name": "The Printer King", "hp": 900, "dmg": 16, "speed": 1.8, "behavior": "boss", "weak": "arcane",
+		"xp": 90, "coins": 50, "calm": "finally finishes printing... a paper crown for you."},
+	"monday": {"name": "The Monday Monster", "hp": 2400, "dmg": 18, "speed": 2.4, "behavior": "boss", "weak": "ice",
+		"xp": 200, "coins": 100, "calm": "yawns and turns back into a sleepy little clock."},
 }
 
 const PARK_POOL := ["cloud", "shroom", "pigeon", "umbrella", "bee"]
 const OFFICE_POOL := ["paper", "coffee", "clip", "printer", "email"]
+const FRIENDBOOK := ["cloud", "shroom", "pigeon", "umbrella", "bee", "paper", "coffee", "clip", "printer", "email",
+	"tick", "printer_king", "monday"]
 const SHARD_TOTAL := 5
 
+const PERKS := {
+	"sparkle_edge": {"name": "Sparkle Edge", "desc": "Wand hits deal +20% damage.", "max": 3},
+	"fire_heart": {"name": "Fire Heart", "desc": "Flame Petal deals +30% damage and burns longer.", "max": 2},
+	"frost_touch": {"name": "Frost Touch", "desc": "Frost Bloom is 25% bigger and freezes longer.", "max": 2},
+	"quick_step": {"name": "Quick Step", "desc": "Your dash recharges 35% faster.", "max": 2},
+	"star_trail": {"name": "Star Trail", "desc": "Dashing leaves a trail of stinging sparkles.", "max": 1},
+	"big_heart": {"name": "Big Heart", "desc": "+25 max HP.", "max": 3},
+	"deep_pockets": {"name": "Deep Pockets", "desc": "+8 max MP.", "max": 3},
+	"mana_bloom": {"name": "Mana Bloom", "desc": "Wand hits restore 1 more MP.", "max": 2},
+	"mochi_power": {"name": "Mochi Power", "desc": "Mochi pounces more often and harder.", "max": 2},
+	"lucky_star": {"name": "Lucky Star", "desc": "+50% coins and more muffin drops.", "max": 2},
+	"cozy_regen": {"name": "Cozy Regen", "desc": "Regenerate HP twice as fast when safe.", "max": 1},
+	"crit": {"name": "Crit Sparkle", "desc": "12% chance to deal double damage.", "max": 2},
+	"swift": {"name": "Swift Shoes", "desc": "Move 12% faster.", "max": 2},
+}
+
+# Main quest chapters.
+const QUESTS := [
+	{"title": "A Cozy Morning", "goal": "Get a Moonbeam Latte from Bree at the Bubbling Cauldron"},
+	{"title": "Wand Practice", "goal": "Find Grandpa Merlo in Petal Park"},
+	{"title": "Wand Practice", "goal": "Cheer up grumpy critters in Petal Park (%d/5)"},
+	{"title": "First Day", "goal": "Head to Spellwork Tower"},
+	{"title": "The Missing Badge", "goal": "Get your badge back in west Petal Park"},
+	{"title": "First Day Jitters", "goal": "Report to Dot at the tower reception"},
+	{"title": "Gremlin Trouble", "goal": "Cheer up the 3 sparkly office gremlins (%d/3)"},
+	{"title": "Paper Jam", "goal": "Defeat the Printer King guarding the stairs"},
+	{"title": "The Monday Monster", "goal": "Climb to the rooftop and face the Monday Monster"},
+	{"title": "Happily Ever Friday", "goal": "You saved Monday! Finish side quests and fill your Friendbook"},
+]
+
+# Side quests: giver, goal text, how many things to do, reward text.
+const SIDE_QUESTS := {
+	"books": {"title": "Runaway Books", "giver": "Professor Hoot", "goal": "Catch the runaway library books (%d/4)",
+		"need": 4, "reward": "+6 max MP and 30 coins"},
+	"yarn": {"title": "Nana's Yarn", "giver": "Nana Thistle", "goal": "Find Nana's lost yarn balls (%d/5)",
+		"need": 5, "reward": "Cozy Scarf: +20 max HP"},
+	"garden": {"title": "Garden Guard", "giver": "Poppy", "goal": "Cheer up critters trampling the park (%d/8)",
+		"need": 8, "reward": "Flower Crown: +3 power, 3 muffins"},
+	"pearl": {"title": "Marina's Pearl", "giver": "Marina", "goal": "Find Marina's pearl near the stream",
+		"need": 1, "reward": "3 Moon Teas and faster MP regen"},
+	"shards": {"title": "Star Shards", "giver": "Legend", "goal": "Collect the Star Shards (%d/5)",
+		"need": 5, "reward": "The Starfall spell"},
+}
+
 var state: Dictionary = {}
+var combat: Combat
 
 
 func _ready() -> void:
@@ -91,8 +130,12 @@ func _setup_input() -> void:
 	var keys := {
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"move_up": [KEY_W, KEY_UP], "move_down": [KEY_S, KEY_DOWN],
-		"confirm": [KEY_SPACE, KEY_ENTER, KEY_Z, KEY_E, KEY_KP_ENTER],
-		"cancel": [KEY_ESCAPE, KEY_X, KEY_BACKSPACE, KEY_M],
+		"confirm": [KEY_SPACE, KEY_ENTER, KEY_E, KEY_KP_ENTER],
+		"cancel": [KEY_ESCAPE, KEY_BACKSPACE, KEY_M, KEY_TAB],
+		"attack": [KEY_J, KEY_Z],
+		"dash": [KEY_K, KEY_SHIFT, KEY_X],
+		"skill1": [KEY_1, KEY_U], "skill2": [KEY_2, KEY_I], "skill3": [KEY_3, KEY_O], "skill4": [KEY_4, KEY_L],
+		"use_muffin": [KEY_H], "use_tea": [KEY_T],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):
@@ -101,13 +144,19 @@ func _setup_input() -> void:
 			var ev := InputEventKey.new()
 			ev.physical_keycode = k
 			InputMap.action_add_event(action, ev)
-	var pads := {"confirm": JOY_BUTTON_A, "cancel": JOY_BUTTON_B}
+	var mouse := {"attack": MOUSE_BUTTON_LEFT, "dash": MOUSE_BUTTON_RIGHT}
+	for action in mouse:
+		var mb := InputEventMouseButton.new()
+		mb.button_index = mouse[action]
+		InputMap.action_add_event(action, mb)
+	var pads := {"confirm": JOY_BUTTON_A, "cancel": JOY_BUTTON_START, "attack": JOY_BUTTON_X, "dash": JOY_BUTTON_B,
+		"skill1": JOY_BUTTON_Y, "skill2": JOY_BUTTON_LEFT_SHOULDER, "skill3": JOY_BUTTON_RIGHT_SHOULDER}
 	for action in pads:
 		var jb := InputEventJoypadButton.new()
 		jb.button_index = pads[action]
 		InputMap.action_add_event(action, jb)
 	var axes := {"move_left": [JOY_AXIS_LEFT_X, -1.0], "move_right": [JOY_AXIS_LEFT_X, 1.0],
-		"move_up": [JOY_AXIS_LEFT_Y, -1.0], "move_down": [JOY_AXIS_LEFT_Y, 1.0]}
+		"move_up": [JOY_AXIS_LEFT_Y, -1.0], "move_down": [JOY_AXIS_LEFT_Y, 1.0], "skill4": [JOY_AXIS_TRIGGER_RIGHT, 1.0]}
 	for action in axes:
 		var jm := InputEventJoypadMotion.new()
 		jm.axis = axes[action][0]
@@ -119,10 +168,12 @@ func _setup_input() -> void:
 func new_game(hero_name: String, style: String, robe: int, hair: int) -> void:
 	state = {
 		"name": hero_name, "style": style, "robe": robe, "hair": hair,
-		"level": 1, "xp": 0, "hp": 40, "max_hp": 40, "mp": 14, "max_mp": 14, "atk": 8, "def": 2,
-		"coins": 10, "items": {"muffin": 1, "tea": 0}, "spells": ["sparkle"],
+		"level": 1, "xp": 0, "hp": 60, "max_hp": 60, "mp": 24, "max_mp": 24, "atk": 10,
+		"coins": 10, "items": {"muffin": 2, "tea": 1}, "spells": [],
 		"quest": 0, "flags": {}, "shards": [], "friends": {}, "known_weak": {},
-		"map": "home_in", "pos": [-2.2, -1.2], "tutorial_timing": 0,
+		"perks": {}, "pending_perks": 0, "side": {"shards": {"state": "active", "count": 0}},
+		"collected": [], "park_calmed": 0,
+		"map": "home_in", "pos": [-2.2, -1.2],
 	}
 	stats_changed.emit()
 
@@ -152,12 +203,14 @@ func load_game() -> bool:
 	for k in data:
 		state[k] = data[k]
 	# JSON turns ints into floats; tidy the integer stats back up.
-	for k in ["level", "xp", "hp", "max_hp", "mp", "max_mp", "atk", "def", "coins", "quest", "robe", "hair", "tutorial_timing"]:
+	for k in ["level", "xp", "hp", "max_hp", "mp", "max_mp", "atk", "coins", "quest", "robe", "hair",
+			"pending_perks", "park_calmed"]:
 		state[k] = int(state[k])
-	for k in state["items"]:
-		state["items"][k] = int(state["items"][k])
-	for k in state["friends"]:
-		state["friends"][k] = int(state["friends"][k])
+	for dict_key in ["items", "friends", "perks"]:
+		for k in state[dict_key]:
+			state[dict_key][k] = int(state[dict_key][k])
+	for k in state["side"]:
+		state["side"][k]["count"] = int(state["side"][k]["count"])
 	stats_changed.emit()
 	return true
 
@@ -208,13 +261,40 @@ func item_count(id: String) -> int:
 func learn(spell: String) -> void:
 	if not state["spells"].has(spell):
 		state["spells"].append(spell)
+	stats_changed.emit()
+
+
+func perk(id: String) -> int:
+	return int(state["perks"].get(id, 0))
+
+
+func add_perk(id: String) -> void:
+	state["perks"][id] = perk(id) + 1
+	match id:
+		"big_heart":
+			state["max_hp"] += 25
+			state["hp"] += 25
+		"deep_pockets":
+			state["max_mp"] += 8
+			state["mp"] += 8
+	stats_changed.emit()
+
+
+## Three random perks that aren't maxed out yet.
+func perk_choices() -> Array:
+	var pool: Array = []
+	for id in PERKS:
+		if perk(id) < int(PERKS[id]["max"]):
+			pool.append(id)
+	pool.shuffle()
+	return pool.slice(0, 3)
 
 
 func xp_to_next() -> int:
-	return 20 * int(state["level"])
+	return 25 * int(state["level"])
 
 
-## Adds XP and returns how many levels were gained.
+## Adds XP and returns how many levels were gained. Each level also grants a perk pick.
 func add_xp(n: int) -> int:
 	state["xp"] += n
 	var gained := 0
@@ -224,7 +304,7 @@ func add_xp(n: int) -> int:
 		state["max_hp"] += 10
 		state["max_mp"] += 3
 		state["atk"] += 2
-		state["def"] += 1
+		state["pending_perks"] += 1
 		gained += 1
 	if gained > 0:
 		full_heal()
@@ -232,15 +312,21 @@ func add_xp(n: int) -> int:
 	return gained
 
 
+# ------------------------------------------------------------ quests
 func objective() -> String:
-	match int(state.get("quest", 0)):
-		0: return "Grab a Moonbeam Latte at the Bubbling Cauldron cafe"
-		1: return "Head to Spellwork Tower for your first day"
-		2: return "Find your lost badge in Petal Park"
-		3: return "Enter Spellwork Tower and report to reception"
-		4: return "Cheer up the 3 office gremlins (%d/3)" % gremlins_done()
-		5: return "Climb to the rooftop and face the Monday Monster"
-		_: return "You saved Monday! Explore and fill your Friendbook"
+	var q := int(state.get("quest", 0))
+	if q >= QUESTS.size():
+		return ""
+	var goal: String = QUESTS[q]["goal"]
+	match q:
+		2: return goal % mini(5, int(state["park_calmed"]))
+		6: return goal % gremlins_done()
+	return goal
+
+
+func chapter_title() -> String:
+	var q := clampi(int(state.get("quest", 0)), 0, QUESTS.size() - 1)
+	return QUESTS[q]["title"]
 
 
 func gremlins_done() -> int:
@@ -249,3 +335,36 @@ func gremlins_done() -> int:
 		if flag("beat_" + id):
 			n += 1
 	return n
+
+
+func side_state(id: String) -> String:
+	return String(state["side"].get(id, {}).get("state", "none"))
+
+
+func side_count(id: String) -> int:
+	return int(state["side"].get(id, {}).get("count", 0))
+
+
+func start_side(id: String) -> void:
+	if not state["side"].has(id):
+		state["side"][id] = {"state": "active", "count": 0}
+
+
+## Adds progress to an active side quest. Returns true when it just became ready to turn in.
+func side_progress(id: String, n := 1) -> bool:
+	if side_state(id) != "active":
+		return false
+	state["side"][id]["count"] = side_count(id) + n
+	if side_count(id) >= int(SIDE_QUESTS[id]["need"]):
+		state["side"][id]["state"] = "ready"
+		return true
+	return false
+
+
+func finish_side(id: String) -> void:
+	state["side"][id]["state"] = "done"
+
+
+func side_goal(id: String) -> String:
+	var g: String = SIDE_QUESTS[id]["goal"]
+	return g % side_count(id) if g.contains("%d") else g

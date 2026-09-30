@@ -43,10 +43,18 @@ var _banner: Label
 var _fade: ColorRect
 var _hint: Label
 var _rotate_hint: Label
+var _xp_bar: ProgressBar
+var _skill_bar: HBoxContainer
+var _slots: Array = [] # {id, root, icon, cd, key, cost, kind}
+var _boss_panel: PanelContainer
+var _boss_name: Label
+var _boss_hp: ProgressBar
+var _boss_weak: TextureRect
 
 
 func _ready() -> void:
 	layer = 10
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	theme = make_theme()
 	_build_hud()
 	_build_prompt()
@@ -220,6 +228,8 @@ func _build_hud() -> void:
 	left.add_child(lv)
 	_name_label = label("Hero", 26)
 	lv.add_child(_name_label)
+	_xp_bar = bar(Color("ffd36b"), 300, 8)
+	lv.add_child(_xp_bar)
 	for which in ["hp", "mp"]:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
@@ -265,6 +275,7 @@ func _build_hud() -> void:
 	oh.add_child(icon("star_gold", 28))
 	_objective = label("", 22)
 	oh.add_child(_objective)
+	_build_combat_hud()
 
 
 func refresh() -> void:
@@ -281,7 +292,10 @@ func refresh() -> void:
 	_coins.text = str(s["coins"])
 	_muffins.text = str(Game.item_count("muffin"))
 	_shards.text = "%d/%d" % [s["shards"].size(), Game.SHARD_TOTAL]
-	_objective.text = Game.objective()
+	_objective.text = ("%s:  %s" % [Game.chapter_title(), Game.objective()]) if Game.objective() != "" else Game.chapter_title()
+	if _xp_bar:
+		_xp_bar.max_value = Game.xp_to_next()
+		_xp_bar.value = s["xp"]
 
 
 func show_hud(v: bool) -> void:
@@ -488,6 +502,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _dialog_open and event.is_action_pressed("confirm"):
 		get_viewport().set_input_as_handled()
 		_advance()
+	elif get_tree().paused and event.is_action_pressed("confirm"):
+		# main.gd is paused during the perk picker, so press the card here.
+		var f := get_viewport().gui_get_focus_owner()
+		if f is BaseButton and f.is_visible_in_tree():
+			get_viewport().set_input_as_handled()
+			(f as BaseButton).pressed.emit()
 
 
 # --------------------------------------------------------- toasts & fades
@@ -622,3 +642,174 @@ func show_ending() -> void:
 	b.grab_focus.call_deferred()
 	await _ending_closed
 	root.queue_free()
+
+
+# --------------------------------------------------------- combat HUD
+func _build_combat_hud() -> void:
+	var touch := DisplayServer.is_touchscreen_available()
+	_skill_bar = HBoxContainer.new()
+	_skill_bar.add_theme_constant_override("separation", 10)
+	_skill_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bottom := top_center(hud, 18, true)
+	bottom.add_child(_skill_bar)
+	bottom.visible = not touch
+	var keys := ["1", "2", "3", "4"]
+	for i in Game.SKILL_ORDER.size():
+		var sid: String = Game.SKILL_ORDER[i]
+		_slots.append(_slot(Game.SKILLS[sid]["icon"], keys[i], "skill", sid))
+	_slots.append(_slot("swing", "Shift", "dash", "dash"))
+	_slots.append(_slot("muffin", "H", "item", "muffin"))
+	_slots.append(_slot("tea", "T", "item", "tea"))
+
+	_boss_panel = PanelContainer.new()
+	_boss_panel.add_theme_stylebox_override("panel", flat(Color(0.2, 0.1, 0.3, 0.8), 18, Color("ff7eb6"), 3, 8))
+	var bv := VBoxContainer.new()
+	_boss_panel.add_child(bv)
+	var bh := HBoxContainer.new()
+	bh.alignment = BoxContainer.ALIGNMENT_CENTER
+	bh.add_theme_constant_override("separation", 10)
+	_boss_name = label("", 26, Color("fff3f8"))
+	bh.add_child(_boss_name)
+	_boss_weak = icon("unknown", 30)
+	bh.add_child(_boss_weak)
+	bv.add_child(bh)
+	_boss_hp = bar(Color("ff6b8a"), 560, 22)
+	_boss_hp.max_value = 1.0
+	_boss_hp.step = 0.001
+	bv.add_child(_boss_hp)
+	_boss_panel.visible = false
+	top_center(hud, 80).add_child(_boss_panel)
+
+
+func _slot(icon_name: String, key: String, kind: String, id: String) -> Dictionary:
+	var root := PanelContainer.new()
+	root.custom_minimum_size = Vector2(76, 76)
+	root.add_theme_stylebox_override("panel", flat(Color(1, 0.98, 1, 0.9), 18, Color("ffc2dd"), 3, 4))
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(66, 66)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(holder)
+	var ic := TextureRect.new()
+	if icon_name == "swing":
+		ic.texture = Art.tex("sparkle")
+		ic.modulate = Color("ff9fd8")
+	else:
+		ic.texture = Art.tex(icon_name)
+	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ic.offset_left = 8
+	ic.offset_top = 6
+	ic.offset_right = -8
+	ic.offset_bottom = -10
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(ic)
+	var cd := ColorRect.new()
+	cd.color = Color(0.25, 0.12, 0.35, 0.65)
+	cd.anchor_right = 1.0
+	cd.anchor_top = 1.0
+	cd.anchor_bottom = 1.0
+	cd.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(cd)
+	var k := label(key, 16, Color("8a6aa8"))
+	k.position = Vector2(2, -2)
+	holder.add_child(k)
+	var cost := label("", 16, Color("5b8def"))
+	cost.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	cost.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	cost.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	holder.add_child(cost)
+	_skill_bar.add_child(root)
+	return {"id": id, "root": root, "icon": ic, "cd": cd, "cost": cost, "kind": kind}
+
+
+## Called every frame while exploring: cooldown sweeps, MP costs, locked slots.
+func update_combat(p: Player) -> void:
+	if p == null or Game.state.is_empty():
+		return
+	for s in _slots:
+		var cd_rect: ColorRect = s["cd"]
+		var ic: TextureRect = s["icon"]
+		var cost: Label = s["cost"]
+		var frac := 0.0
+		match String(s["kind"]):
+			"skill":
+				var sid: String = s["id"]
+				var sk: Dictionary = Game.SKILLS[sid]
+				var learned: bool = Game.state["spells"].has(sid)
+				ic.modulate = Color.WHITE if learned else Color(1, 1, 1, 0.2)
+				cost.text = str(sk["mp"]) if learned else "?"
+				if learned:
+					frac = float(p.skill_cd.get(sid, 0.0)) / float(sk["cd"])
+					if Game.state["mp"] < int(sk["mp"]):
+						ic.modulate = Color(0.6, 0.6, 1.0, 0.6)
+			"dash":
+				frac = p.dash_ready() / 0.75
+				cost.text = ""
+			"item":
+				cost.text = "x%d" % Game.item_count(s["id"])
+				ic.modulate = Color.WHITE if Game.item_count(s["id"]) > 0 else Color(1, 1, 1, 0.3)
+		cd_rect.anchor_top = 1.0 - clampf(frac, 0.0, 1.0)
+	var t: TouchControls = get_node_or_null("TouchControls")
+	if t:
+		t.update_cooldowns(p)
+
+
+func boss_bar(boss_name: String, ratio: float, weak: String, known: bool) -> void:
+	if boss_name == "":
+		_boss_panel.visible = false
+		return
+	_boss_panel.visible = true
+	_boss_name.text = boss_name
+	_boss_hp.value = ratio
+	_boss_weak.texture = Art.tex(weak if known else "unknown")
+
+
+# ---------------------------------------------------------- perk picker
+signal _perk_picked(id: String)
+
+
+## Shows three perk cards (the game is paused meanwhile) and returns the chosen id.
+func choose_perk(ids: Array) -> String:
+	var root := Control.new()
+	root.theme = theme
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.2, 0.1, 0.3, 0.6)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(dim)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 18)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	full_center(root).add_child(v)
+	var t := label("Level %d! Choose a perk" % Game.state["level"], 52, Color("fff3c4"))
+	t.add_theme_color_override("font_outline_color", Color("6a3a8a"))
+	t.add_theme_constant_override("outline_size", 16)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 18)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_child(row)
+	var first: Button
+	for id in ids:
+		var pk: Dictionary = Game.PERKS[id]
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(300, 190)
+		b.text = "%s\n\n%s%s" % [pk["name"], pk["desc"], ("\n(Rank %d/%d)" % [Game.perk(id) + 1, pk["max"]]) if int(pk["max"]) > 1 else ""]
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		b.add_theme_font_size_override("font_size", 25)
+		var perk_id: String = id
+		b.pressed.connect(func():
+			Audio.sfx("level_up")
+			_perk_picked.emit(perk_id))
+		row.add_child(b)
+		if first == null:
+			first = b
+	first.grab_focus.call_deferred()
+	Audio.sfx("sparkle")
+	var picked: String = await _perk_picked
+	root.queue_free()
+	return picked

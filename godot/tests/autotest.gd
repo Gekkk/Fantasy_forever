@@ -1,16 +1,20 @@
 extends Node
 ## Automated play-through used for testing (run with `-- --autotest`).
-## Drives the real game through its input paths: the whole quest, many
-## battles (checking control returns to the overworld every time), a defeat,
-## the boss and the ending. Saves screenshots along the way.
+## A little bot plays the real-time combat through the real input actions:
+## it walks up to critters, chains wand combos, casts skills, dashes out of
+## red telegraphs, drinks potions, and picks perks. It plays the whole main
+## quest (arenas, elite gremlins, both bosses), a side quest, a defeat, and
+## the ending, saving screenshots along the way.
 
 var main
 var shots_dir := "user://shots"
 var failures: Array = []
-var battles_done := 0
+var stats := {"attacks": 0, "casts": 0, "dashes": 0, "items": 0, "perks": 0, "downs": 0}
+var _shot_flags := {}
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	DirAccess.make_dir_recursive_absolute(shots_dir)
 	_run.call_deferred()
 
@@ -31,6 +35,12 @@ func shot(name: String) -> void:
 	print("SHOT ", name)
 
 
+func shot_once(name: String) -> void:
+	if not _shot_flags.has(name):
+		_shot_flags[name] = true
+		await shot(name)
+
+
 func press(action: String) -> void:
 	var ev := InputEventAction.new()
 	ev.action = action
@@ -48,18 +58,24 @@ func check(cond: bool, what: String) -> void:
 	if not cond:
 		failures.append(what)
 		print("FAIL: ", what)
+	else:
+		print("ok: ", what)
 
 
-## Clicks through any open dialog (choosing the default option).
+func q() -> int:
+	return int(Game.state["quest"])
+
+
+## Clicks through dialogs and perk cards until control returns.
 func drain_dialogs(max_sec := 30.0) -> void:
 	var t := 0.0
 	while t < max_sec:
-		if main.ui.is_dialog_open():
+		if main._perk_showing:
+			await _pick_perk()
+		elif main.ui.is_dialog_open():
 			await press("confirm")
 			await _wait(0.05)
 			t += 0.05
-		elif main.mode == main.Mode.BATTLE:
-			return
 		elif main.mode == main.Mode.SCRIPT:
 			await _wait(0.1)
 			t += 0.1
@@ -71,154 +87,45 @@ func drain_dialogs(max_sec := 30.0) -> void:
 func wait_mode(m: int, max_sec := 20.0) -> bool:
 	var t := 0.0
 	while main.mode != m and t < max_sec:
+		if main.ui.is_dialog_open():
+			await press("confirm")
 		await _wait(0.1)
 		t += 0.1
 	return main.mode == m
 
 
-## Plays out whatever battle is running. style: "ui" uses the menu buttons,
-## "smart" picks commands directly (spells/items/guard) to cover more logic.
-func play_battle(style := "ui", screenshot_prefix := "") -> String:
-	var b: Battle = null
-	var t := 0.0
-	while b == null and t < 30.0:
-		for c in main.get_children():
-			if c is Battle:
-				b = c
-		await _wait(0.05)
-		t += 0.05
-	check(b != null, "battle node appeared")
-	if b == null:
-		var names := []
-		for c in main.get_children():
-			names.append(c.name)
-		print("  debug: mode=", main.mode, " dialog=", main.ui.is_dialog_open(), " children=", names, " quest=", Game.state["quest"])
-	if b == null:
-		return "none"
-	var result := [""]
-	b.finished.connect(func(r): result[0] = r)
-	var took_shot := false
-	var ring_shot := false
-	var results_shot := false
-	t = 0.0
-	while result[0] == "" and t < 240.0 and is_instance_valid(b):
-		# Timing rings: aim for a mix of perfect and sloppy presses.
-		var ring: TimingRing = null
-		for c in b.ui.get_children():
-			if c is TimingRing and not c._done:
-				ring = c
-		if ring:
-			if screenshot_prefix != "" and not ring_shot:
-				ring_shot = true
-				await shot(screenshot_prefix + "_ring")
-			var goal := randf()
-			while is_instance_valid(ring) and not ring._done:
-				var d: float = absf(ring._r - ring.target_r)
-				if (goal < 0.6 and d < 5.0) or (goal >= 0.6 and goal < 0.8 and ring._r < ring.target_r + 20) or goal >= 0.8 and ring._t > ring.duration * 0.4:
-					await press("confirm")
-					break
-				await _frames(1)
-			await _wait(0.05)
-			t += 0.05
-			continue
-		if b._results and is_instance_valid(b._results):
-			if screenshot_prefix != "" and not results_shot:
-				results_shot = true
-				await shot(screenshot_prefix + "_results")
-			await _wait(0.3)
-			await press("confirm")
-			await _wait(0.3)
-			t += 0.6
-			continue
-		if b._cmd_panel.visible and b._cmd_box.get_child_count() > 0:
-			if screenshot_prefix != "" and not took_shot:
-				took_shot = true
-				await _wait(0.3)
-				await shot(screenshot_prefix + "_menu")
-			if style == "ui":
-				await _wait(0.2)
-				await press("confirm")
-				await _wait(0.2)
-				if b._cmd_panel.visible and b._selecting_target:
-					await press("confirm")
-			else:
-				_smart_command(b)
-			await _wait(0.2)
-			t += 0.4
-			continue
-		await _wait(0.1)
-		t += 0.1
-	check(result[0] != "", "battle finished (style %s)" % style)
-	battles_done += 1
-	return result[0]
-
-
-func _smart_command(b: Battle) -> void:
-	var alive: Array = b._alive()
-	var s := Game.state
-	var hp_ratio: float = float(s["hp"]) / float(s["max_hp"])
-	var target: Dictionary = alive.pick_random()
-	var cmd := {}
-	if hp_ratio < 0.35 and Game.item_count("muffin") > 0:
-		cmd = {"type": "item", "item": "muffin"}
-	elif hp_ratio < 0.35 and s["mp"] >= 4 and s["spells"].has("heal"):
-		cmd = {"type": "spell", "spell": "heal", "target": null}
-	elif s["mp"] >= 9 and s["spells"].has("starfall") and alive.size() > 1:
-		cmd = {"type": "spell", "spell": "starfall", "target": null}
-	elif s["mp"] >= 4 and randf() < 0.7:
-		var weak: String = target["weak"]
-		var sid: String = {"fire": "flame", "ice": "frost", "arcane": "sparkle"}.get(weak, "sparkle")
-		if not s["spells"].has(sid):
-			sid = "sparkle"
-		if s["mp"] >= int(Game.SPELLS[sid]["mp"]):
-			cmd = {"type": "spell", "spell": sid, "target": target}
-	if cmd.is_empty():
-		if s["mp"] < 3 and randf() < 0.3:
-			cmd = {"type": "guard"}
-		elif Game.item_count("tea") > 0 and s["mp"] < 4 and randf() < 0.3:
-			cmd = {"type": "item", "item": "tea"}
-		else:
-			cmd = {"type": "attack", "target": target}
-	b._command_chosen.emit(cmd)
-
-
-func after_battle_ok(label: String) -> void:
-	# Let the finished battle fade out and tear down first.
-	var wt := 0.0
-	while main.mode == main.Mode.BATTLE and wt < 20.0:
-		await _wait(0.1)
-		wt += 0.1
-	await drain_dialogs()
-	# A roaming critter may have bumped into us meanwhile: play that battle too.
-	while main.mode == main.Mode.BATTLE:
-		print("extra battle -> ", await play_battle("ui"))
-		await drain_dialogs()
-	await wait_mode(main.Mode.EXPLORE, 10.0)
-	var leftover := false
-	for c in main.get_children():
-		if c is Battle:
-			leftover = true
-	check(not leftover, label + ": battle node freed")
-	check(main.mode == main.Mode.EXPLORE, label + ": back to exploring (mode %d)" % main.mode)
-	check(main.world.visible, label + ": world visible")
+func _pick_perk() -> void:
+	await shot_once("perk_choice")
 	await _wait(0.3)
-	# Movement must work after the battle (the old game froze here).
-	var before: Vector3 = main.player.position
-	var dir := "move_left" if before.x > 0 else "move_right"
-	Input.action_press(dir)
-	await _wait(0.4)
-	Input.action_release(dir)
+	await press("confirm")
+	stats["perks"] += 1
 	await _wait(0.2)
-	check(main.player.position.distance_to(before) > 0.3, label + ": player can move after battle")
+
+
+func release_moves() -> void:
+	for a in ["move_left", "move_right", "move_up", "move_down"]:
+		Input.action_release(a)
+
+
+func steer(v: Vector3) -> void:
+	release_moves()
+	if v.length() < 0.05:
+		return
+	var d := v.normalized()
+	if d.x < -0.1:
+		Input.action_press("move_left", -d.x)
+	elif d.x > 0.1:
+		Input.action_press("move_right", d.x)
+	if d.z < -0.1:
+		Input.action_press("move_up", -d.z)
+	elif d.z > 0.1:
+		Input.action_press("move_down", d.z)
 
 
 func teleport(pos: Vector3) -> void:
-	# Keep roaming critters still so scripted steps aren't interrupted;
-	# battle steps re-activate the one they want to fight.
-	for c in main.critters:
-		if is_instance_valid(c):
-			c.active = false
+	release_moves()
 	main.player.position = pos
+	main.player.velocity = Vector3.ZERO
 	main.follower.position = pos + Vector3(-0.8, 0, 0.8)
 	main._snap_camera()
 	await _wait(0.3)
@@ -231,66 +138,219 @@ func interact(id: String) -> void:
 	await wait_mode(main.Mode.EXPLORE, 15.0)
 
 
+# ================================================================ combat bot
+func _threats(p: Vector3) -> Array:
+	var out: Array = []
+	for c in main.world.get_children():
+		if c is Hazard and not c.friendly and not c.is_queued_for_deletion():
+			var h: Hazard = c
+			if h.contains(p) or h.contains(p + Vector3(0.5, 0, 0)) or h.contains(p - Vector3(0.5, 0, 0)):
+				out.append(h)
+	return out
+
+
+func _live_enemies() -> Array:
+	return main.combat.enemies.filter(func(e): return is_instance_valid(e) and not e.dead)
+
+
+func _nearest(p: Vector3, prefer: Callable) -> Enemy:
+	var best: Enemy = null
+	var bd := 1e9
+	for e in _live_enemies():
+		var d: float = p.distance_to(e.global_position)
+		if prefer.is_valid() and prefer.call(e):
+			d -= 100.0
+		if d < bd:
+			bd = d
+			best = e
+	return best
+
+
+func _ready_skill(sid: String) -> bool:
+	return Game.state["spells"].has(sid) and float(main.player.skill_cd.get(sid, 0.0)) <= 0.0 \
+		and int(Game.state["mp"]) >= int(Game.SKILLS[sid]["mp"])
+
+
+## One decision of the bot. Uses the same actions a player would press.
+func _bot_tick(prefer: Callable) -> void:
+	var p: Player = main.player
+	var s := Game.state
+	var pos := p.global_position
+	var hp_ratio := float(s["hp"]) / float(s["max_hp"])
+	# 1) Survive.
+	if hp_ratio < 0.4:
+		if _ready_skill("heal"):
+			stats["casts"] += 1
+			await press("skill3")
+			return
+		if hp_ratio < 0.3 and Game.item_count("muffin") > 0:
+			stats["items"] += 1
+			await press("use_muffin")
+			return
+	if int(s["mp"]) < 5 and Game.item_count("tea") > 0 and randf() < 0.05:
+		stats["items"] += 1
+		await press("use_tea")
+	# 2) Dodge telegraphs: dash out of anything glowing under us.
+	var threats := _threats(pos)
+	if not threats.is_empty():
+		var h: Hazard = threats[0]
+		var away := pos - h.global_position
+		away.y = 0
+		if h.shape == "line" or h.shape == "sweep":
+			away = h.dir.cross(Vector3.UP) * (1.0 if away.dot(h.dir.cross(Vector3.UP)) >= 0.0 else -1.0)
+		if away.length() < 0.1:
+			away = Vector3(randf_range(-1, 1), 0, randf_range(-1, 1))
+		steer(away)
+		if p.dash_ready() <= 0.0:
+			stats["dashes"] += 1
+			await press("dash")
+		else:
+			await _frames(2)
+		return
+	# 3) Fight the nearest critter.
+	var e := _nearest(pos, prefer)
+	if e == null:
+		release_moves()
+		await _frames(2)
+		return
+	var to := e.global_position - pos
+	to.y = 0
+	var dist := to.length()
+	var near := 0
+	for o in _live_enemies():
+		if pos.distance_to(o.global_position) < 6.0:
+			near += 1
+	if near >= 2 and _ready_skill("starfall"):
+		stats["casts"] += 1
+		await press("skill4")
+		return
+	if dist < 3.0 and _ready_skill("frost") and (e.weak == "ice" or near >= 2 or randf() < 0.3):
+		stats["casts"] += 1
+		await press("skill2")
+		return
+	if dist < 7.0 and _ready_skill("flame") and (e.weak == "fire" or randf() < 0.25):
+		p.face(to)
+		steer(to)
+		stats["casts"] += 1
+		await press("skill1")
+		return
+	var reach := 1.5 + e.hit_radius
+	if dist > reach:
+		steer(to)
+		await _frames(2)
+	else:
+		release_moves()
+		p.face(to)
+		stats["attacks"] += 1
+		await press("attack")
+
+
+## Plays the real-time fight until `done` returns true. Returns false on timeout.
+func fight_bot(done: Callable, max_sec: float, label: String, prefer := Callable()) -> bool:
+	var start := Time.get_ticks_msec()
+	var shot_at := 3.0
+	while (Time.get_ticks_msec() - start) / 1000.0 < max_sec:
+		if done.call():
+			release_moves()
+			return true
+		if main._perk_showing:
+			release_moves()
+			await _pick_perk()
+			continue
+		if main.ui.is_dialog_open():
+			release_moves()
+			await press("confirm")
+			await _wait(0.05)
+			continue
+		if main.mode != main.Mode.EXPLORE:
+			release_moves()
+			await _wait(0.1)
+			continue
+		await _bot_tick(prefer)
+		var el := (Time.get_ticks_msec() - start) / 1000.0
+		if el > shot_at and label != "":
+			shot_at = 1e9
+			await shot(label)
+	release_moves()
+	print("fight_bot timed out: ", label, " quest=", q(), " enemies=", _live_enemies().size())
+	return done.call()
+
+
+func controls_ok(label: String) -> void:
+	await drain_dialogs()
+	await wait_mode(main.Mode.EXPLORE, 15.0)
+	check(main.mode == main.Mode.EXPLORE, label + ": back to exploring (mode %d)" % main.mode)
+	await _wait(0.2)
+	var before: Vector3 = main.player.position
+	var dir := "move_left" if before.x > 0 else "move_right"
+	Input.action_press(dir)
+	await _wait(0.4)
+	Input.action_release(dir)
+	await _wait(0.1)
+	check(main.player.position.distance_to(before) > 0.3, label + ": player can move")
+
+
+## A boss/arena fight; if the hero gets knocked out, heal up and retry.
+func boss_fight(start: Callable, done: Callable, label: String, tries := 3) -> void:
+	for attempt in tries:
+		var downs_before: int = stats["downs"]
+		await start.call()
+		var ok := await fight_bot(func(): return done.call() or main.world.map_id == "home_in", 240.0, label + ("" if attempt == 0 else "_retry%d" % attempt))
+		await drain_dialogs()
+		if done.call():
+			print(label, " won on attempt ", attempt + 1, " at level ", Game.state["level"], " hp ", Game.state["hp"], "/", Game.state["max_hp"])
+			return
+		if main.world.map_id == "home_in":
+			stats["downs"] = downs_before + 1
+			print(label, ": knocked out on attempt ", attempt + 1, " (level ", Game.state["level"], ")")
+			await wait_mode(main.Mode.EXPLORE, 15.0)
+		elif not ok:
+			print(label, ": timeout")
+		# Level up a bit, like a player would by roaming around.
+		Game.add_xp(Game.xp_to_next())
+		Game.add_item("muffin", 2)
+		await drain_dialogs()
+	check(done.call(), label + " beaten")
+
+
+# ==================================================================== script
 func _run() -> void:
 	seed(12345)
 	await _wait(1.5)
 	await shot("01_title")
-	# Character creator: pick the fairy with pink robe.
 	main.title._set_style("fairy")
 	main.title._set_robe(1)
 	main.title._set_hair(1)
-	await _wait(0.4)
-	await shot("02_title_fairy")
 	main.title._name.text = "Luna"
-	if main.title._continue.visible:
-		main.title._on_start()
 	main.title._on_start()
 	await _wait(1.5)
-	await shot("03_intro_dialog")
 	await drain_dialogs()
 	check(main.mode == main.Mode.EXPLORE, "exploring after intro")
-	await shot("04_city_start")
-
 	check(main.world.map_id == "home_in", "new game starts at home")
-	await shot("04a_home_inside")
-	# Walk around with real input.
-	var start: Vector3 = main.player.position
-	Input.action_press("move_down")
-	Input.action_press("move_right")
-	await _wait(1.0)
-	Input.action_release("move_down")
-	Input.action_release("move_right")
-	check(main.player.position.distance_to(start) > 1.5, "player walks with input")
-	await interact("bed")
-	# Leave home through the door.
+
+	# Leave home.
 	await teleport(Vector3(0, 0, 3.4))
 	await teleport(Vector3(0, 0, 5.2))
 	await _wait(1.2)
-	check(main.world.map_id == "city", "left home into the city")
-	await shot("04_city_start")
-
-	# Cafe (quest 0 -> 1): enter, talk to Bree at the counter
-	await teleport(Vector3(0, 0, -6.8))
-	await shot("05_cafe_front")
-	await interact("cafe")
-	check(main.world.map_id == "cafe_in", "entered the cafe")
-	await teleport(Vector3(-0.6, 0, -1.4))
-	await shot("05b_cafe_inside")
-	main.interact("bree")
-	await _wait(1.2)
-	await shot("06_cafe_dialog")
 	await drain_dialogs()
-	check(Game.state["quest"] == 1, "quest 1 after cafe")
+	check(main.world.map_id == "city", "left home into the city")
+	await shot("02_city")
+
+	# Chapter 1: latte + Flame Petal.
+	await teleport(Vector3(0, 0, -6.8))
+	await interact("cafe")
+	await teleport(Vector3(-0.6, 0, -1.4))
+	await interact("bree")
+	check(q() == 1, "quest 1 after cafe")
 	check(Game.state["spells"].has("flame"), "learned flame")
 	await teleport(Vector3(0, 0, 4.9))
 	await _wait(1.2)
-	check(main.world.map_id == "city", "left the cafe")
+	await drain_dialogs()
 
-	# Library: Professor Hoot teaches Heal Glow; a shard hides inside.
+	# Library: Heal Glow (and the library shard).
 	await teleport(Vector3(-32, 0, -6.8))
 	await interact("library")
 	await teleport(Vector3(0, 0, -1.6))
-	await shot("05c_library")
 	await interact("hoot")
 	check(Game.state["spells"].has("heal"), "learned heal")
 	await teleport(Vector3(5.0, 0, -3.0))
@@ -298,168 +358,132 @@ func _run() -> void:
 	await drain_dialogs(8.0)
 	await teleport(Vector3(0, 0, 5.9))
 	await _wait(1.2)
-
-	# Boutique: the magic mirror changes outfits.
-	await teleport(Vector3(31, 0, -6.8))
-	await interact("boutique")
-	await teleport(Vector3(3.5, 0, -2.2))
-	await shot("05d_boutique")
-	await interact("mirror")
-	await teleport(Vector3(0, 0, 4.6))
-	await _wait(1.2)
-	check(main.world.map_id == "city", "back in the city")
-
-	# Tower door without badge (quest 1 -> 2)
-	await teleport(Vector3(15, 0, -6.5))
-	await shot("07_tower_front")
-	await teleport(Vector3(15, 0, -8.6))
-	await _wait(0.5)
 	await drain_dialogs()
-	check(Game.state["quest"] == 2, "quest 2 after badge check")
-	await teleport(Vector3(15, 0, -5))
 
-	# Merlo teaches Frost Bloom
-	await teleport(Vector3(-12, 0, 7.6))
-	await shot("08_park_merlo")
+	# Chapter 2: Merlo teaches Frost, then cheer up 5 park critters in real time.
+	await teleport(Vector3(-12, 0, 7.8))
 	await interact("merlo")
 	check(Game.state["spells"].has("frost"), "learned frost")
+	check(q() == 2, "quest 2 after Merlo")
+	var e := _nearest(main.player.position, func(x): return x.id in Game.PARK_POOL)
+	if e:
+		await teleport(e.global_position + Vector3(0, 0, 3.0))
+	await fight_bot(func(): return q() >= 3, 200.0, "03_park_fight", func(x): return x.global_position.z > 3.0)
+	await controls_ok("park")
+	check(q() == 3, "park practice done (quest %d, calmed %d)" % [q(), Game.state["park_calmed"]])
 
-	# A few park battles through real critter contact.
-	for i in 4:
-		var c: Critter = null
-		for cc in main.critters:
-			if is_instance_valid(cc):
-				c = cc
-				break
-		if c == null:
-			break
-		c.active = false
-		await teleport(c.position + Vector3(0, 0, 1.6))
-		main.player.face(c.position - main.player.position)
-		c.active = true
-		if i == 0:
-			await shot("09_park_critter")
-		if i % 2 == 0:
-			await press("confirm") # wand swing -> first strike
-		else:
-			main.start_encounter(c, false)
-		var r := await play_battle("ui" if i % 2 == 0 else "smart", "10_park" if i == 0 else "")
-		print("park battle ", i, " -> ", r, "  L", Game.state["level"])
-		await after_battle_ok("park battle %d" % i)
-
-	# Badge gang (quest 2 -> 3)
-	Game.full_heal()
-	await teleport(Vector3(-16.5, 0, 11))
-	await _wait(0.5)
-	await drain_dialogs(5.0)
-	var r2 := await play_battle("smart", "11_badge")
-	print("badge battle -> ", r2)
-	await after_battle_ok("badge battle")
-	if Game.state["quest"] != 3:
-		Game.state["quest"] = 3
-	check(Game.state["quest"] == 3, "quest 3 after badge")
-
-	# Shards in the city
-	for p in [Vector3(-23.5, 0, -12.8), Vector3(3.2, 0, 27.5)]:
-		await teleport(p + Vector3(1.5, 0, 0))
-		await teleport(p)
+	# Side quest: Nana's yarn.
+	await teleport(Vector3(-30, 0, 17.4))
+	await interact("thistle")
+	check(Game.side_state("yarn") == "active", "yarn side quest started")
+	for spot in main.world.YARN_SPOTS:
+		await teleport(spot + Vector3(2.0, 0, 0))
+		await teleport(spot)
 		await drain_dialogs(5.0)
-	await shot("11b_wishing_tree")
-	check(Game.state["shards"].size() == 3, "3 shards by now (%d)" % Game.state["shards"].size())
+		await fight_bot(func(): return not main.combat.any_aggro_near(main.player.position, 7.0), 30.0, "")
+	check(Game.side_state("yarn") == "ready", "all yarn found (%d)" % Game.side_count("yarn"))
+	await teleport(Vector3(-30, 0, 17.4))
+	await interact("thistle")
+	check(Game.side_state("yarn") == "done", "yarn side quest turned in")
 
-	# Enter the tower
+	# City shards.
+	for pos in [Vector3(-23.5, 0, -12.8), Vector3(3.4, 0, 26.6)]:
+		await teleport(pos + Vector3(1.5, 0, 0))
+		await teleport(pos)
+		await drain_dialogs(5.0)
+
+	# Chapter 3: no badge -> badge arena (two waves).
 	await teleport(Vector3(15, 0, -6.5))
-	await teleport(Vector3(15, 0, -8.6))
+	await teleport(Vector3(15, 0, -8.8))
+	await _wait(0.4)
+	await drain_dialogs()
+	check(q() == 4, "quest 4 after tower door")
+	Game.full_heal()
+	await boss_fight(func():
+		await teleport(Vector3(-15, 0, 12))
+		await teleport(Vector3(-18, 0, 12))
+		await _wait(0.2)
+		await drain_dialogs(), func(): return q() >= 5, "04_badge_arena")
+	await controls_ok("badge arena")
+	check(not main.combat.arena_active, "arena barrier removed")
+
+	# Chapter 4: into the tower, Dot, elite gremlins.
+	await teleport(Vector3(15, 0, -6.5))
+	await teleport(Vector3(15, 0, -8.8))
 	await _wait(1.5)
 	await drain_dialogs()
 	check(main.world.map_id == "tower", "entered tower")
-	await shot("12_tower_lobby")
 	await teleport(Vector3(-5, 0, 6.6))
 	await interact("dot")
-	check(Game.state["quest"] == 4, "quest 4 after Dot")
-	await teleport(Vector3(0, 0, 3))
-	await shot("13_office")
+	check(q() == 6, "quest 6 after Dot")
+	await shot("05_tower")
+	Game.full_heal()
+	var g := _nearest(main.player.position, func(x): return x.uid != "")
+	if g:
+		await teleport(g.global_position + Vector3(0, 0, 3.5))
+	await fight_bot(func(): return q() >= 7, 240.0, "06_gremlins", func(x): return x.uid != "")
+	await drain_dialogs()
+	check(q() == 7, "gremlins cheered up (%d/3)" % Game.gremlins_done())
 
-	# Gremlins
-	var guard := 0
-	while Game.gremlins_done() < 3 and guard < 8:
-		guard += 1
-		var g: Critter = null
-		for cc in main.critters:
-			if is_instance_valid(cc) and cc.uid != "":
-				g = cc
-		if g == null:
-			break
-		Game.full_heal()
-		await teleport(g.position + Vector3(0, 0, 2.2))
-		main.start_encounter(g, false)
-		var r3 := await play_battle("smart", "14_office" if guard == 1 else "")
-		print("gremlin battle -> ", r3)
-		await after_battle_ok("gremlin battle %d" % guard)
-	check(Game.state["quest"] == 5, "quest 5 after gremlins (%d)" % Game.state["quest"])
-
-	# Tower shards (-> Starfall)
-	for p in [Vector3(11.3, 0, -4.2), Vector3(-11.3, 0, 12.3)]:
-		await teleport(p + Vector3(-1.5, 0, 0))
-		await teleport(p)
+	# Tower shards -> Starfall.
+	for pos in [Vector3(11.3, 0, -4.2), Vector3(-11.3, 0, 12.3)]:
+		await teleport(pos + Vector3(-1.5, 0, 0))
+		await teleport(pos)
 		await drain_dialogs(8.0)
 	check(Game.state["spells"].has("starfall"), "learned starfall")
 
-	# A defeat: control must come back at home, healed.
-	for cc in main.critters:
-		if is_instance_valid(cc):
-			Game.state["hp"] = 1
-			await teleport(cc.position + Vector3(0, 0, 2))
-			main.start_encounter(cc, false)
-			var b: Battle = null
-			var bt := 0.0
-			while b == null and bt < 30.0:
-				await _wait(0.2)
-				bt += 0.2
-				for c in main.get_children():
-					if c is Battle:
-						b = c
-			if b:
-				b._command_chosen.emit({"type": "guard"})
-				# Don't guard the incoming hit so we faint.
-				var tt := 0.0
-				while tt < 90.0 and is_instance_valid(b) and not b._over:
-					# Stay at 1 HP (Mochi likes to heal you) and keep guarding untimed.
-					if Game.state["hp"] > 1:
-						Game.state["hp"] = 1
-					if b._cmd_panel.visible:
-						b._command_chosen.emit({"type": "guard"})
-					await _wait(0.1)
-					tt += 0.1
-			await after_battle_ok("defeat")
-			check(main.world.map_id == "home_in", "woke up at home after defeat")
-			check(Game.state["hp"] == Game.state["max_hp"], "healed after defeat")
-			break
+	# Chapter 5: the Printer King.
+	Game.full_heal()
+	await boss_fight(func():
+		if main.world.map_id != "tower":
+			await main.load_map("tower", Vector3(0, 0, 5))
+		await teleport(Vector3(0, 0, 3))
+		await teleport(Vector3(0, 0, -3.5))
+		await _wait(0.2)
+		await drain_dialogs(), func(): return q() >= 8, "07_printer_king")
+	await controls_ok("printer king")
 
-	# Go back up to the roof. Give the hero typical end-game stats.
-	var s := Game.state
-	while s["level"] < 6:
-		Game.add_xp(Game.xp_to_next())
-	Game.add_item("muffin", 3)
-	Game.add_item("tea", 2)
+	# A defeat on purpose: you must wake up at home, healed, able to move.
+	var victim := _nearest(main.player.position, Callable())
+	if victim == null:
+		main.combat.spawn_enemy("email", main.player.position + Vector3(2, 0, 0), Rect2(-10, -4, 20, 9))
+	Game.state["hp"] = 1
+	var t0 := Time.get_ticks_msec()
+	while main.world.map_id != "home_in" and Time.get_ticks_msec() - t0 < 30000:
+		Game.state["hp"] = mini(int(Game.state["hp"]), 1)
+		var v := _nearest(main.player.position, Callable())
+		if v and main.player.position.distance_to(v.global_position) > 1.2 and main.mode == main.Mode.EXPLORE:
+			steer(v.global_position - main.player.position)
+		await _frames(2)
+	release_moves()
+	await drain_dialogs()
+	check(main.world.map_id == "home_in", "woke up at home after defeat")
+	check(Game.state["hp"] == Game.state["max_hp"], "healed after defeat")
+	await controls_ok("after defeat")
+
+	# Chapter 6: the rooftop.
 	await main.load_map("tower", Vector3(0, 0, -5))
 	await teleport(Vector3(0, 0, -7.4))
-	await teleport(Vector3(0, 0, -8.6))
+	await teleport(Vector3(0, 0, -8.8))
 	await _wait(1.5)
 	await drain_dialogs()
 	check(main.world.map_id == "roof", "reached rooftop")
-	await shot("15_rooftop")
-	await teleport(Vector3(0, 0, -1.0))
-	main.interact("boss")
-	await _wait(0.8)
-	await press("confirm") # finish typing
-	await _wait(0.2)
-	await press("confirm") # choose "Fight!"
-	var r4 := await play_battle("smart", "16_boss")
-	print("boss battle -> ", r4, "  hp ", Game.state["hp"])
-	# Ending sequence
+	await shot("08_rooftop")
+	Game.full_heal()
+	await boss_fight(func():
+		if main.world.map_id != "roof":
+			await main.load_map("roof", Vector3(0, 0, 6.8))
+			await drain_dialogs()
+		await teleport(Vector3(0, 0, -1.0))
+		main.interact("boss")
+		await _wait(0.8)
+		await press("confirm")
+		await _wait(0.2)
+		await press("confirm")
+		await drain_dialogs(), func(): return q() >= 9, "09_monday")
+	# Ending.
 	var t := 0.0
-	while t < 40.0:
+	while t < 60.0:
 		if main.ui.is_dialog_open():
 			await press("confirm")
 		var ending := false
@@ -468,33 +492,25 @@ func _run() -> void:
 				ending = true
 		if ending:
 			await _wait(1.0)
-			await shot("17_ending")
+			await shot("10_ending")
 			await press("confirm")
 			break
 		await _wait(0.1)
 		t += 0.1
 	await drain_dialogs()
-	check(Game.state["quest"] == 6, "boss beaten, quest 6 (%d)" % Game.state["quest"])
-	await wait_mode(main.Mode.EXPLORE, 10)
-	await shot("18_after_boss")
+	check(q() == 9, "boss beaten, quest 9 (%d)" % q())
+	await controls_ok("after ending")
 
-	# Stress: many quick battles, alternating styles, all must return cleanly.
-	await main.load_map("city", Vector3(-10, 0, 8))
-	for i in 10:
-		var ids: Array = [Game.PARK_POOL.pick_random()]
-		if i % 3 == 0:
-			ids.append(Game.PARK_POOL.pick_random())
-		main.run_script(func(): await main.battle(ids, "park", i % 2 == 0))
-		var rr := await play_battle("ui" if i % 2 else "smart")
-		await after_battle_ok("stress battle %d (%s)" % [i, rr])
-
-	# Menu
+	# Quest log / skills menu.
 	main.open_menu()
 	await _wait(0.5)
-	await shot("19_menu_friendbook")
+	await shot("11_menu_quests")
+	main.menu._magic()
+	await _wait(0.3)
+	await shot("12_menu_skills")
 	main.close_menu()
 
-	print("BATTLES PLAYED: ", battles_done)
+	print("STATS ", stats, " level ", Game.state["level"], " perks ", Game.state["perks"])
 	if failures.is_empty():
 		print("AUTOTEST PASS")
 	else:

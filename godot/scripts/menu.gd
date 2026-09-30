@@ -1,6 +1,6 @@
 class_name PauseMenu
 extends Control
-## Pause menu: Friendbook, spells & items, volume settings, save.
+## Pause menu: quest log, skills & perks, Friendbook, settings.
 
 signal closed
 
@@ -29,10 +29,10 @@ func _ready() -> void:
 	tabs.add_theme_constant_override("separation", 10)
 	v.add_child(tabs)
 	var first: Button
-	for pair in [["Friendbook", _friendbook], ["Magic & Items", _magic], ["Settings", _settings]]:
+	for pair in [["Quests", _quests], ["Skills", _magic], ["Friendbook", _friendbook], ["Settings", _settings]]:
 		var b := Button.new()
 		b.text = pair[0]
-		b.custom_minimum_size = Vector2(200, 54)
+		b.custom_minimum_size = Vector2(160, 54)
 		b.pressed.connect(pair[1])
 		b.pressed.connect(func(): Audio.sfx("ui_move"))
 		tabs.add_child(b)
@@ -54,7 +54,7 @@ func _ready() -> void:
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_content.add_theme_constant_override("separation", 10)
 	scroll.add_child(_content)
-	_friendbook()
+	_quests()
 	first.grab_focus.call_deferred()
 
 
@@ -66,7 +66,7 @@ func _clear() -> void:
 func _friendbook() -> void:
 	_clear()
 	var found := 0
-	var ids: Array = Game.PARK_POOL + Game.OFFICE_POOL + ["monday"]
+	var ids: Array = Game.FRIENDBOOK
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 10)
@@ -97,28 +97,91 @@ func _friendbook() -> void:
 	_content.add_child(grid)
 
 
-func _magic() -> void:
+func _quests() -> void:
 	_clear()
-	_content.add_child(UI.label("Spells", 28, Color("e0609f")))
-	for sid in Game.state["spells"]:
-		var sp: Dictionary = Game.SPELLS[sid]
+	var q := int(Game.state["quest"])
+	_content.add_child(UI.label("Main Story", 28, Color("e0609f")))
+	for i in Game.QUESTS.size():
+		var ch: Dictionary = Game.QUESTS[i]
+		if i > 0 and ch["title"] == Game.QUESTS[i - 1]["title"]:
+			continue
+		if i > q:
+			break
+		var current: bool = ch["title"] == Game.chapter_title()
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
-		row.add_child(UI.icon(sp["element"] if sp["element"] != "none" else "hp", 34))
-		row.add_child(UI.label("%s  (%d MP)  -  %s" % [sp["name"], sp["mp"], sp["desc"]], 22))
+		row.add_child(UI.icon("star_gold" if current else "hp", 28))
+		var text: String = "Chapter %d: %s" % [_chapter_number(i), ch["title"]]
+		if current:
+			text += "  -  " + Game.objective()
+		var l := UI.label(text, 22, UI.INK if current else Color("a898b8"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(l)
 		_content.add_child(row)
-	if not Game.state["spells"].has("starfall"):
-		_content.add_child(UI.label("Collect all 5 Star Shards to learn a secret spell... (%d / 5)" % Game.state["shards"].size(), 20, Color("8a6aa8")))
+	_content.add_child(UI.label("Side Quests", 28, Color("e0609f")))
+	var any := false
+	for sid in Game.SIDE_QUESTS:
+		var st := Game.side_state(sid)
+		if st == "none":
+			continue
+		any = true
+		var sq: Dictionary = Game.SIDE_QUESTS[sid]
+		var status: String = {"active": Game.side_goal(sid), "ready": "Done! Return to " + sq["giver"],
+			"done": "Complete"}.get(st, "")
+		var l := UI.label("%s  (%s)  -  %s\n      Reward: %s" % [sq["title"], sq["giver"], status, sq["reward"]], 20,
+			Color("a898b8") if st == "done" else UI.INK)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD
+		_content.add_child(l)
+	if not any:
+		_content.add_child(UI.label("Talk to people around town with a ! over their head.", 20, Color("8a6aa8")))
+
+
+func _chapter_number(idx: int) -> int:
+	var n := 0
+	for i in idx + 1:
+		if i == 0 or Game.QUESTS[i]["title"] != Game.QUESTS[i - 1]["title"]:
+			n += 1
+	return n
+
+
+func _magic() -> void:
+	_clear()
+	var s := Game.state
+	_content.add_child(UI.label("Level %d   Power %d   HP %d / %d   MP %d / %d   XP %d / %d" % [s["level"], s["atk"],
+		s["hp"], s["max_hp"], s["mp"], s["max_mp"], s["xp"], Game.xp_to_next()], 22, Color("8a6aa8")))
+	_content.add_child(UI.label("Skills", 28, Color("e0609f")))
+	var keys := ["1 / U", "2 / I", "3 / O", "4 / L"]
+	for i in Game.SKILL_ORDER.size():
+		var sid: String = Game.SKILL_ORDER[i]
+		var sk: Dictionary = Game.SKILLS[sid]
+		var learned: bool = s["spells"].has(sid)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		row.add_child(UI.icon(sk["icon"], 34))
+		var text: String = "[%s] %s  (%d MP, %.0fs)  -  %s" % [keys[i], sk["name"], sk["mp"], sk["cd"], sk["desc"]] if learned else "[%s] ???  -  not learned yet" % keys[i]
+		var l := UI.label(text, 20, UI.INK if learned else Color("a898b8"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(l)
+		_content.add_child(row)
+	_content.add_child(UI.label("Wand combo: J / Z / click (3 hits)    Dash: K / Shift / right-click (dodges through attacks)", 18, Color("8a6aa8")))
+	_content.add_child(UI.label("Perks", 28, Color("e0609f")))
+	if s["perks"].is_empty():
+		_content.add_child(UI.label("Level up to pick your first perk!", 20, Color("8a6aa8")))
+	for pid in s["perks"]:
+		var pk: Dictionary = Game.PERKS[pid]
+		var l := UI.label("%s  %s  -  %s" % [pk["name"], "*".repeat(Game.perk(pid)), pk["desc"]], 20)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD
+		_content.add_child(l)
 	_content.add_child(UI.label("Items", 28, Color("e0609f")))
 	for iid in Game.ITEMS:
 		var it: Dictionary = Game.ITEMS[iid]
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
 		row.add_child(UI.icon(it["icon"], 34))
-		row.add_child(UI.label("%s  x%d  -  %s" % [it["name"], Game.item_count(iid), it["desc"]], 22))
+		row.add_child(UI.label("%s  x%d  -  %s" % [it["name"], Game.item_count(iid), it["desc"]], 20))
 		_content.add_child(row)
-	var s := Game.state
-	_content.add_child(UI.label("Level %d   Power %d   Defense %d   XP %d / %d" % [s["level"], s["atk"], s["def"], s["xp"], Game.xp_to_next()], 22, Color("8a6aa8")))
 
 
 func _settings() -> void:
