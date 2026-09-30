@@ -457,14 +457,19 @@ func _run() -> void:
 
 	# A defeat on purpose: you must wake up at home, healed, able to move.
 	# Leash the attacker to wherever we are standing so it can always reach us.
+	# (Removed quietly: cheering them up would give XP and could pop the perk picker.)
 	for old in _live_enemies():
-		old._die()
+		main.combat.enemies.erase(old)
+		old.queue_free()
 	var here: Vector3 = main.player.position
 	main.combat.spawn_enemy("email", here + Vector3(2, 0, 0), Rect2(here.x - 6, here.z - 6, 12, 12), "", true)
 	Game.state["hp"] = 1
 	var t0 := Time.get_ticks_msec()
 	while main.world.map_id != "home_in" and Time.get_ticks_msec() - t0 < 30000:
 		Game.state["hp"] = mini(int(Game.state["hp"]), 1)
+		if main._perk_showing:
+			await _pick_perk()
+			continue
 		var v := _nearest(main.player.position, Callable())
 		if v == null and main.mode == main.Mode.EXPLORE:
 			# Mochi may have cheered the last one up: bring in another.
