@@ -10,7 +10,7 @@ func _run() -> void:
 	get_tree().root.add_child.call_deferred(main)
 	await get_tree().create_timer(1.0).timeout
 	main.title.visible = false
-	Game.new_game("Luna", "witch", 0, 0)
+	Game.new_game("Luna", OS.get_environment("LOOK_STYLE") if OS.get_environment("LOOK_STYLE") != "" else "witch", 1, 1)
 	var map: String = OS.get_environment("LOOK_MAP") if OS.get_environment("LOOK_MAP") != "" else "city"
 	var pos := Vector3(-6, 0, -3.5) if map == "city" else Vector3(0, 0, 1.5)
 	if OS.get_environment("LOOK_POS") != "":
@@ -18,8 +18,8 @@ func _run() -> void:
 		pos = Vector3(float(pp[0]), 0, float(pp[1]))
 	await main.load_map(map, pos, false)
 	main.mode = main.Mode.EXPLORE
-	for c in main.critters:
-		c.active = false
+	for e in main.combat.enemies:
+		e.set_process(false)
 	main.ui.show_hud(true)
 	main.ui.refresh()
 	var variants := {

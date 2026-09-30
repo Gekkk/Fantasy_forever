@@ -15,6 +15,17 @@ class Batch:
 		groups[key]["x"].append(Transform3D(b, pos))
 		groups[key]["c"].append(color)
 
+	## Adds a KayKit prop (see Kit). `variant` recolors leaves ("blossom") or tints ("#ffd0e0").
+	func add_kit(path: String, pos: Vector3, rot_y := 0.0, s := 1.0, variant := "", color := Color.WHITE) -> void:
+		var base := Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(rot_y), 0)).scaled(Vector3.ONE * s), pos)
+		for p in Kit.parts(path):
+			var mesh: Mesh = p[0]
+			var key := "kit|%d|%s" % [mesh.get_instance_id(), variant]
+			if not groups.has(key):
+				groups[key] = {"mesh": mesh, "emit": 0.0, "x": [], "c": [], "mat": Kit.mat(Kit.texture_of(mesh), variant)}
+			groups[key]["x"].append(base * (p[1] as Transform3D))
+			groups[key]["c"].append(color)
+
 	func flush(parent: Node3D) -> void:
 		for key in groups:
 			var g: Dictionary = groups[key]
@@ -28,7 +39,7 @@ class Batch:
 				mm.set_instance_color(i, g["c"][i])
 			var mmi := MultiMeshInstance3D.new()
 			mmi.multimesh = mm
-			mmi.material_override = Art.mat(Color.WHITE, g["emit"])
+			mmi.material_override = g["mat"] if g.has("mat") else Art.mat(Color.WHITE, g["emit"])
 			parent.add_child(mmi)
 		groups.clear()
 
@@ -125,19 +136,15 @@ func spinner(n: Node3D, speed := 30.0) -> void:
 
 
 func tree(pos: Vector3, blossom := false, s := 1.0) -> void:
-	var trunk := Color("a87a5c")
-	batch.add(Art.cyl(0.18, 0.26, 1.4), trunk, pos + Vector3(0, 0.7, 0) * s, Vector3.ZERO, Vector3.ONE * s)
-	var cols := [Color("ffb3d1"), Color("ffc9df"), Color("ff9fc4")] if blossom else [Color("6fcf7d"), Color("8fdc86"), Color("5dbb70")]
-	batch.add(Art.sphere(0.95), cols[0], pos + Vector3(0, 1.9, 0) * s, Vector3.ZERO, Vector3.ONE * s)
-	batch.add(Art.sphere(0.7), cols[1], pos + Vector3(-0.5, 2.4, 0.25) * s, Vector3.ZERO, Vector3.ONE * s)
-	batch.add(Art.sphere(0.65), cols[2], pos + Vector3(0.55, 2.3, -0.2) * s, Vector3.ZERO, Vector3.ONE * s)
+	var h := absi(int(pos.x * 7.0 + pos.z * 13.0))
+	var kind := "nature/tree_single_A" if h % 2 == 0 else "nature/tree_single_B"
+	batch.add_kit(kind, pos, float(h % 360), 3.0 * s, "blossom" if blossom else ("autumn" if h % 11 == 0 else ""))
 	Art.collider_round(self, 0.45 * s, 2.0, pos)
 
 
 func pine(pos: Vector3, s := 1.0) -> void:
-	batch.add(Art.cyl(0.14, 0.2, 0.8), Color("a87a5c"), pos + Vector3(0, 0.4, 0) * s, Vector3.ZERO, Vector3.ONE * s)
-	batch.add(Art.cyl(0.0, 1.0, 1.5), Color("4fae7a"), pos + Vector3(0, 1.4, 0) * s, Vector3.ZERO, Vector3.ONE * s)
-	batch.add(Art.cyl(0.0, 0.75, 1.2), Color("63c08a"), pos + Vector3(0, 2.2, 0) * s, Vector3.ZERO, Vector3.ONE * s)
+	var h := absi(int(pos.x * 5.0 + pos.z * 3.0))
+	batch.add_kit("nature/tree_single_B", pos, float(h % 360), 2.7 * s, "mint" if h % 3 == 0 else "")
 	Art.collider_round(self, 0.4 * s, 2.0, pos)
 
 
@@ -167,22 +174,17 @@ func grass_tufts(center: Vector3, size: Vector2, count: int) -> void:
 
 
 func lamp(pos: Vector3, with_light := true, color := Color("ffd98a")) -> void:
-	batch.add(Art.cyl(0.07, 0.1, 2.8), Color("5a4a7a"), pos + Vector3(0, 1.4, 0))
-	batch.add(Art.cyl(0.18, 0.18, 0.1), Color("5a4a7a"), pos + Vector3(0, 2.85, 0))
-	batch.add(Art.sphere(0.24), color, pos + Vector3(0, 3.1, 0), Vector3.ZERO, Vector3.ONE, 2.2)
-	batch.add(Art.cyl(0.0, 0.22, 0.25), Color("5a4a7a"), pos + Vector3(0, 3.45, 0))
+	var rot := 90.0 if pos.x < 0 else -90.0
+	batch.add_kit("city/streetlight", pos, rot, 3.4, "#c8b8f0")
+	var head := pos + Basis.from_euler(Vector3(0, deg_to_rad(rot), 0)) * Vector3(-0.2 * 3.4, 3.0, 0)
+	batch.add(Art.sphere(0.18), color, head, Vector3.ZERO, Vector3(1, 0.6, 1), 2.4)
 	if with_light:
-		Art.light(self, pos + Vector3(0, 2.9, 0), color, 1.6, 6.5)
+		Art.light(self, head + Vector3(0, -0.2, 0), color, 1.6, 6.5)
 	Art.collider_round(self, 0.15, 2.0, pos)
 
 
 func bench(pos: Vector3, rot_y := 0.0) -> void:
-	var n := Art.node(self, "Bench", pos)
-	n.rotation_degrees.y = rot_y
-	Art.part(n, Art.box(Vector3(1.6, 0.1, 0.5)), Color("c98a5c"), Vector3(0, 0.45, 0))
-	Art.part(n, Art.box(Vector3(1.6, 0.45, 0.08)), Color("c98a5c"), Vector3(0, 0.75, -0.22))
-	for x in [-0.65, 0.65]:
-		Art.part(n, Art.box(Vector3(0.08, 0.45, 0.45)), Color("5a4a7a"), Vector3(x, 0.22, 0))
+	batch.add_kit("city/bench", pos, rot_y, 4.0, "#ffe0f0")
 	Art.collider(self, Vector3(1.6, 1, 0.6), pos + Vector3(0, 0.5, 0), rot_y)
 
 
@@ -388,6 +390,8 @@ func _build_city() -> void:
 	for i in 9:
 		batch.add(Art.sphere(12.0, true), Color("8a7bc0").lerp(Color("b49ad8"), i / 9.0), Vector3(-96 + i * 24, -1, -85 - (i % 2) * 10), Vector3.ZERO, Vector3(1.3, 0.8, 1))
 
+	_city_dressing()
+
 	invisible_wall(Vector3(90, 4, 1), Vector3(0, 2, -15.5))
 	invisible_wall(Vector3(90, 4, 1), Vector3(0, 2, 30.0))
 	invisible_wall(Vector3(1, 4, 50), Vector3(-42, 2, 7))
@@ -429,6 +433,56 @@ func _build_city() -> void:
 		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(12, 36), 0, randf_range(5, 15)), "area": east})
 	for i in 4:
 		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-34, 34), 0, randf_range(23.5, 27.5)), "area": meadow})
+
+
+## KayKit city bits and fantasy buildings: street life along the road,
+## a pastel skyline behind the shops and a storybook countryside beyond the park.
+func _city_dressing() -> void:
+	# Parked cars (magic still needs parking) along the far side of the road.
+	var cars := ["city/car_taxi", "city/car_hatchback", "city/car_sedan", "city/car_stationwagon"]
+	var car_cols := ["", "~#ffb3d1", "~#b8d8ff", "~#c9b3f0", "~#ffe0a0", "~#a8ecd0"]
+	var i := 0
+	for x in [-38.0, -30.5, -17.0, -3.0, 5.5, 17.5, 31.0, 38.5]:
+		batch.add_kit(cars[i % 4], Vector3(x, 0, -0.9), 90.0 if i % 2 == 0 else -90.0, 2.6, car_cols[i % car_cols.size()])
+		Art.collider(self, Vector3(2.5, 1.2, 1.2), Vector3(x, 0.6, -0.9))
+		i += 1
+	for x in [-26.5, -12.5, 12.5, 26.5]:
+		batch.add_kit("city/firehydrant", Vector3(x, 0, -4.5), 0.0, 3.0, "=#ff9fb8")
+	for x in [-33.0, -7.5, 7.5, 21.5]:
+		batch.add_kit("city/trash_A", Vector3(x, 0, 1.0), 0.0, 3.2, "=#c9b3f0")
+	# Skyline: pastel office towers behind the shop row (people still work 9 to 5!).
+	var towers := ["city/building_C_withoutBase", "city/building_D_withoutBase", "city/building_H_withoutBase",
+		"city/building_F_withoutBase", "city/building_G_withoutBase", "city/building_E_withoutBase"]
+	var tints := ["=#e8d8ff", "=#ffd8e8", "=#d8ecff", "=#fff0d8", "=#e0f5e8"]
+	i = 0
+	for x in range(-52, 53, 7):
+		var z := -24.0 - float((i * 5) % 3) * 3.0
+		batch.add_kit(towers[i % towers.size()], Vector3(x, -0.3, z), float((i % 2) * 180), 4.2 + float(i % 3) * 0.6, tints[i % tints.size()])
+		i += 1
+	batch.add_kit("city/watertower", Vector3(-45, 0, -19), 0.0, 5.0, "=#c9b3f0")
+	# Storybook countryside past the park.
+	batch.add_kit("medieval/building_windmill_blue", Vector3(-30, 0, 40), 30.0, 6.0)
+	batch.add_kit("medieval/building_church_blue", Vector3(8, 0, 44), 0.0, 6.0)
+	batch.add_kit("medieval/building_tower_A_blue", Vector3(34, 0, 41), -20.0, 5.5)
+	batch.add_kit("medieval/building_home_A_blue", Vector3(-12, 0, 38), 15.0, 5.0)
+	batch.add_kit("medieval/building_tavern_blue", Vector3(22, 0, 37), -10.0, 5.0)
+	for p in [Vector3(-45, 0, 36), Vector3(-2, 0, 36), Vector3(46, 0, 35), Vector3(-22, 0, 47), Vector3(28, 0, 50)]:
+		batch.add_kit("nature/hills_A_trees", p, p.x * 3.0, 6.0)
+	for p in [Vector3(-55, 0, 25), Vector3(55, 0, 22), Vector3(-60, 0, 5), Vector3(60, 0, 8)]:
+		batch.add_kit("nature/mountain_A_grass_trees", p, p.x, 9.0)
+	# A little flower market in the park.
+	for data in [[Vector3(-27.5, 0, 2.6), "flag_red"], [Vector3(-30.5, 0, 2.6), "flag_blue"]]:
+		batch.add_kit("medieval/tent", data[0], 0.0, 4.0, "=#ffc2e0" if data[1] == "flag_red" else "=#c9e0ff")
+		Art.collider_round(self, 0.9, 1.5, data[0])
+	for p in [Vector3(-26, 0, 3.4), Vector3(-32, 0, 3.2)]:
+		batch.add_kit("medieval/barrel", p, 0.0, 3.5)
+	# Rocks and lilies for texture.
+	for p in [Vector3(-14, 0, 14), Vector3(3, 0, 12.5), Vector3(22, 0, 13), Vector3(-33, 0, 9), Vector3(33, 0, 14), Vector3(-6, 0, 20)]:
+		batch.add_kit(["nature/rock_single_C", "nature/rock_single_E", "nature/rock_single_D"][absi(int(p.x)) % 3], p, p.z * 20.0, 3.5)
+	# Floating clouds drift over the sky.
+	for data in [[Vector3(-30, 16, -40), 5.0], [Vector3(20, 20, -48), 7.0], [Vector3(50, 15, -30), 4.0], [Vector3(-60, 22, -30), 6.0]]:
+		var c := Kit.spawn(self, "nature/cloud_big", data[0], randf() * 360.0, data[1], "=#ffffff")
+		floater(c, 0.6)
 
 
 const BOOK_SPOTS := [Vector3(-27, 0, 2.2), Vector3(20, 0, -5.4), Vector3(-2, 0, 18.5), Vector3(33, 0, 21)]
@@ -866,21 +920,17 @@ func _build_tower() -> void:
 
 
 func _desk(p: Vector3) -> void:
-	batch.add(Art.box(Vector3(2.2, 0.12, 1.1)), Color("d4a275"), p + Vector3(0, 0.8, 0))
-	for sx in [-1, 1]:
-		batch.add(Art.box(Vector3(0.1, 0.8, 1.0)), Color("b8875c"), p + Vector3(1.0 * sx, 0.4, 0))
-	batch.add(Art.box(Vector3(0.9, 0.6, 0.08)), Color("4a4a60"), p + Vector3(0, 1.25, -0.3))
-	batch.add(Art.box(Vector3(0.8, 0.5, 0.09)), [Color("8ff0ff"), Color("ffc2e0"), Color("c3ffb0")][int(abs(p.x + p.z)) % 3], p + Vector3(0, 1.25, -0.29), Vector3.ZERO, Vector3.ONE, 1.4)
-	batch.add(Art.cyl(0.35, 0.35, 0.1), Color("9d86e8"), p + Vector3(0, 0.45, 0.9))
-	batch.add(Art.box(Vector3(0.6, 0.6, 0.1)), Color("9d86e8"), p + Vector3(0, 0.8, 1.2))
-	batch.add(Art.cyl(0.07, 0.06, 0.12), Color("fff4e0"), p + Vector3(0.7, 0.92, 0.2))
-	Art.collider(self, Vector3(2.2, 1, 1.1), p + Vector3(0, 0.5, 0))
+	batch.add_kit("furniture/table_medium_long", p, 0.0, 0.72)
+	batch.add(Art.box(Vector3(0.9, 0.6, 0.08)), Color("4a4a60"), p + Vector3(0, 1.1, -0.3))
+	batch.add(Art.box(Vector3(0.8, 0.5, 0.09)), [Color("8ff0ff"), Color("ffc2e0"), Color("c3ffb0")][int(abs(p.x + p.z)) % 3], p + Vector3(0, 1.1, -0.29), Vector3.ZERO, Vector3.ONE, 1.4)
+	batch.add_kit("furniture/chair_C", p + Vector3(0, 0, 1.0), 180.0, 0.72)
+	batch.add_kit("furniture/book_set", p + Vector3(0.7, 0.72, 0.1), 20.0, 0.8)
+	Art.collider(self, Vector3(2.2, 1, 1.4), p + Vector3(0, 0.5, 0))
 
 
 func _plant(p: Vector3) -> void:
-	batch.add(Art.cyl(0.3, 0.22, 0.5), Color("e98f6f"), p + Vector3(0, 0.25, 0))
-	for o in [Vector3(0, 0.8, 0), Vector3(0.25, 0.65, 0.1), Vector3(-0.2, 0.7, -0.1)]:
-		batch.add(Art.sphere(0.32), Color("6cc978"), p + o)
+	var h := absi(int(p.x * 3.0 + p.z * 5.0))
+	batch.add_kit(["furniture/cactus_medium_A", "furniture/cactus_medium_B", "furniture/lamp_standing"][h % 3], p, float(h % 360), 1.1 if h % 3 < 2 else 0.8)
 	Art.collider_round(self, 0.35, 1.0, p)
 
 
@@ -1009,13 +1059,17 @@ func _night_window(pos: Vector3, size := Vector2(1.8, 1.6)) -> void:
 
 
 func _table(p: Vector3, top := Color("f1e3ee"), stools := 2) -> void:
-	batch.add(Art.cyl(0.08, 0.12, 0.8), Color("8b5a3c"), p + Vector3(0, 0.4, 0))
-	batch.add(Art.cyl(0.7, 0.7, 0.08), top, p + Vector3(0, 0.82, 0))
+	var h := absi(int(p.x * 3.0 + p.z * 7.0))
+	batch.add_kit("cafe/table_round_A_small", p, float(h % 4) * 90.0, 0.9, "=" + top.to_html(false))
+	# A teacup and a little cake on every table.
+	batch.add(Art.cyl(0.09, 0.07, 0.12), Color("fff4f8"), p + Vector3(0.2, 0.96, 0.1))
+	batch.add(Art.cyl(0.13, 0.13, 0.02), Color("ffc2e0"), p + Vector3(0.2, 0.9, 0.1))
+	batch.add(Art.cyl(0.12, 0.12, 0.12), top.darkened(0.05) if top != Color("fff4e0") else Color("ffb3d1"), p + Vector3(-0.2, 0.96, -0.1))
+	batch.add(Art.sphere(0.04), Color("e0405a"), p + Vector3(-0.2, 1.05, -0.1), Vector3.ZERO, Vector3.ONE, 0.3)
 	for i in stools:
 		var a := PI * 0.5 + i * TAU / stools
-		var sp := p + Vector3(cos(a) * 1.1, 0, sin(a) * 1.1)
-		batch.add(Art.cyl(0.08, 0.1, 0.45), Color("fff1dc"), sp + Vector3(0, 0.22, 0))
-		batch.add(Art.sphere(0.32, true), [Color("ff6b8a"), Color("c38bff")][i % 2], sp + Vector3(0, 0.45, 0), Vector3.ZERO, Vector3(1, 0.5, 1))
+		var sp := p + Vector3(cos(a) * 1.05, 0, sin(a) * 1.05)
+		batch.add_kit("cafe/chair_A" if i % 2 == 0 else "cafe/chair_B", sp, rad_to_deg(atan2(-cos(a), -sin(a))), 0.7)
 	Art.collider_round(self, 0.75, 1.0, p)
 
 
@@ -1029,16 +1083,21 @@ func _hanging_lamp(p: Vector3, color := Color("ffd98a"), with_light := true) -> 
 
 func _build_home_in() -> void:
 	_room(12, 10, Color("ffd9e6"), Art.ground_mat(Color("d29a6c"), Color("c0875c"), 2, 0.9, Color("94603e")), "exit_home")
-	slab(Vector3(4.5, 0.03, 3.2), Vector3(0, 0.07, 0.8), Art.ground_mat(Color("ffb3d1"), Color("ffa3c6"), 0))
-	# Cozy bed
-	var bed := Art.node(self, "Bed", Vector3(-4.1, 0, -3.1))
-	Art.part(bed, Art.box(Vector3(2.2, 0.5, 3.0)), Color("a87a5c"), Vector3(0, 0.25, 0))
-	Art.part(bed, Art.box(Vector3(2.0, 0.25, 2.8)), Color("fffaf5"), Vector3(0, 0.62, 0))
-	Art.part(bed, Art.box(Vector3(2.1, 0.12, 1.9)), Color("ff9fc4"), Vector3(0, 0.78, 0.45))
-	Art.part(bed, Art.capsule(0.22, 1.2), Color("fff4e0"), Vector3(0, 0.85, -1.05), Vector3(0, 0, 90))
-	Art.part(bed, Art.box(Vector3(2.2, 1.4, 0.2)), Color("a87a5c"), Vector3(0, 0.7, -1.45))
-	for i in 5:
-		Art.part(bed, Art.sphere(0.07), Color("ffffff"), Vector3(-0.8 + i * 0.4, 0.86, 0.3 + (i % 2) * 0.5), Vector3.ZERO, Vector3(1, 0.4, 1), 0.2, false)
+	batch.add_kit("furniture/rug_oval_A", Vector3(0, 0.02, 0.8), 0.0, 1.4, "=#ffc9de")
+	# Cozy bed, couch corner and pictures (KayKit furniture)
+	batch.add_kit("furniture/bed_double_A", Vector3(-4.1, 0, -3.1), 0.0, 0.8, "=#ffd6e6")
+	batch.add_kit("furniture/cabinet_small_decorated", Vector3(-2.3, 0, -4.4), 0.0, 0.75)
+	batch.add_kit("furniture/lamp_table", Vector3(-5.6, 0, -4.4), 0.0, 0.6)
+	batch.add_kit("furniture/couch_pillows", Vector3(-0.2, 0, 3.4), 180.0, 0.75, "=#c9b3f0")
+	batch.add_kit("furniture/armchair_pillows", Vector3(2.4, 0, 2.6), -130.0, 0.75, "=#ffb8d0")
+	batch.add_kit("furniture/table_low", Vector3(0, 0, 1.4), 0.0, 0.6)
+	batch.add_kit("furniture/book_set", Vector3(0.3, 0.3, 1.4), 70.0, 0.8)
+	batch.add_kit("furniture/pictureframe_large_B", Vector3(-4.1, 1.9, -4.9), 0.0, 0.8)
+	batch.add_kit("furniture/pictureframe_medium", Vector3(-5.93, 2.0, -0.4), 90.0, 0.9)
+	batch.add_kit("furniture/pictureframe_small_A", Vector3(-5.93, 2.1, 0.7), 90.0, 0.9)
+	batch.add_kit("furniture/shelf_B_large_decorated", Vector3(-5.9, 1.9, -2.2), 90.0, 0.8)
+	Art.collider(self, Vector3(2.2, 1, 1.1), Vector3(-0.2, 0.5, 3.4))
+	Art.collider_round(self, 0.6, 1.0, Vector3(2.4, 0, 2.6))
 	Art.collider(self, Vector3(2.2, 1, 3), Vector3(-4.1, 0.5, -3.1))
 	add_interactable("bed", Vector3(-4.1, 0, -1.2), 1.6, "Take a cozy nap")
 	# Fireplace

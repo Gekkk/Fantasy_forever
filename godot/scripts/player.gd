@@ -217,6 +217,7 @@ func _start_swing() -> void:
 	_aim_assist(5.5)
 	velocity = facing() * (5.5 if _combo == 2 else 3.5)
 	Audio.sfx("swing", 0.05, -2.0)
+	model.action(["1H_Melee_Attack_Slice_Diagonal", "1H_Melee_Attack_Slice_Horizontal", "1H_Melee_Attack_Chop"][_combo], 2.2 if _combo < 2 else 1.7)
 	var arm: Node3D = model.find_child("ArmR", true, false)
 	if arm:
 		var tw := create_tween()
@@ -282,6 +283,7 @@ func dash() -> void:
 	face(_dash_dir)
 	state = "dash"
 	_st = 0.0
+	model.action("Dodge_Forward", 2.6)
 	invuln = maxf(invuln, 0.34)
 	_dash_cd = 0.75 * (1.0 - 0.35 * Game.perk("quick_step"))
 	Audio.sfx("swing", 0.1, 1.0)
@@ -307,6 +309,7 @@ func cast(slot: int) -> void:
 	_st = 0.0
 	var atk := float(Game.state["atk"])
 	var w := get_parent()
+	model.action({"heal": "Spellcast_Raise", "starfall": "Spellcast_Long"}.get(sid, "Spellcast_Shoot"), 2.0)
 	var arm: Node3D = model.find_child("ArmR", true, false)
 	if arm:
 		var tw := create_tween()
@@ -402,6 +405,7 @@ func hurt(dmg: int, from: Vector3) -> bool:
 	velocity = (away.normalized() if away.length() > 0.01 else -facing()) * 7.0
 	state = "hurt"
 	_st = 0.0
+	model.action("Hit_A", 1.6)
 	Audio.sfx("hurt", 0.1)
 	Art.float_text(get_parent(), global_position + Vector3(0.2, 1.9, 0), "-%d" % dmg, Color("ff8fa3"), 72)
 	Art.burst(get_parent(), global_position + Vector3(0, 1, 0), Color.WHITE, 10, "sparkle", 3.0, 0.4, 0.3)
@@ -409,8 +413,11 @@ func hurt(dmg: int, from: Vector3) -> bool:
 		Game.combat.main.shake(0.25)
 	if Game.state["hp"] <= 0:
 		state = "dead"
-		var tw := create_tween()
-		tw.tween_property(model, "rotation_degrees:z", 80.0, 0.5).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+		if model is KayChar:
+			model.action("Death_A", 1.0, true)
+		else:
+			var tw := create_tween()
+			tw.tween_property(model, "rotation_degrees:z", 80.0, 0.5).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 		downed.emit()
 	return true
 
@@ -419,3 +426,4 @@ func revive() -> void:
 	state = "normal"
 	invuln = 1.5
 	model.rotation_degrees.z = 0.0
+	model.clear_action()

@@ -41,6 +41,36 @@ static func face(head: Node3D, r: float, opts := {}) -> void:
 ## Chibi humanoid. spec keys: skin, hair, robe, accent, shoes, hair_style,
 ## hat (witch|wizard|circlet|helmet|none), extras (Array), scale.
 static func humanoid(spec: Dictionary) -> ModelAnim:
+	if not spec.get("classic", false):
+		return kay_humanoid(spec)
+	return classic_humanoid(spec)
+
+
+## Maps an old-style NPC spec onto a rigged KayKit character with its colors.
+static func kay_humanoid(spec: Dictionary) -> ModelAnim:
+	var hat: String = spec.get("hat", "")
+	var extras: Array = spec.get("extras", [])
+	var char := "Rogue"
+	if hat == "helmet":
+		char = "Knight"
+	elif extras.has("beard"):
+		char = "Barbarian"
+	elif hat == "wizard" or hat == "witch":
+		char = "Mage"
+	elif spec.get("hair_style", "") == "none" or extras.has("hood"):
+		char = "Rogue_Hooded"
+	var opts := {"items": [], "robe": spec.get("robe", Color("c9b6ec")), "scale": 0.8 * float(spec.get("scale", 1.0)),
+		"wings": extras.has("wings"), "idle": spec.get("idle", "Idle")}
+	if spec.has("hair"):
+		opts["hair"] = spec["hair"]
+	if spec.has("hat_color") and char == "Mage":
+		opts["robe"] = spec["hat_color"]
+	if extras.has("wand"):
+		opts["wand"] = true
+	return KayChar.make(char, opts)
+
+
+static func classic_humanoid(spec: Dictionary) -> ModelAnim:
 	var root := _root("biped", 1.55 * float(spec.get("scale", 1.0)))
 	var skin: Color = spec.get("skin", SKIN)
 	var robe: Color = spec.get("robe", Color("8f6ee8"))
@@ -148,6 +178,17 @@ static func humanoid(spec: Dictionary) -> ModelAnim:
 
 ## The player's hero, driven by the saved style and colors.
 static func hero(style: String, robe: Color, hair: Color) -> ModelAnim:
+	match style:
+		"fairy":
+			return KayChar.make("Rogue", {"items": [], "wand": true, "wings": true, "robe": robe, "hair": hair, "scale": 0.82})
+		"elf":
+			return KayChar.make("Rogue_Hooded", {"items": [], "wand": true, "robe": robe, "hair": hair, "scale": 0.82})
+		_:
+			return KayChar.make("Mage", {"items": ["1H_Wand"], "robe": robe, "hair": hair, "scale": 0.82})
+
+
+## The old primitive-built hero (kept for reference and tests).
+static func hero_classic(style: String, robe: Color, hair: Color) -> ModelAnim:
 	var spec := {"robe": robe, "hair": hair, "accent": Color("ffd36b"), "extras": ["wand"]}
 	match style:
 		"witch":
@@ -161,7 +202,7 @@ static func hero(style: String, robe: Color, hair: Color) -> ModelAnim:
 			spec["hat"] = "circlet"
 			spec["extras"] = ["wand", "ears", "cape"]
 			spec["accent"] = Color("ffe6a0")
-	return humanoid(spec)
+	return classic_humanoid(spec)
 
 
 static func cat(fur := Color("fff4ea"), patch := Color("ffbf85")) -> ModelAnim:

@@ -28,6 +28,56 @@ void fragment() {
 }
 """
 
+## Toon shading for textured KayKit models (CC0 by Kay Lousberg). Their
+## atlas is a grid of gradient cells; up to three cells can be recolored
+## (robe, hair, cape) so the character creator's colors still apply. A soft
+## pastel lift keeps them in the game's dreamy palette.
+const TOON_TEX := """
+shader_type spatial;
+render_mode cull_back;
+uniform sampler2D tex : source_color, filter_linear_mipmap;
+uniform vec4 tint : source_color = vec4(1.0);
+uniform float lift = 0.12;
+uniform float sat = 1.05;
+uniform float rim = 0.35;
+uniform vec4 rim_tint : source_color = vec4(1.0, 0.86, 0.96, 1.0);
+uniform vec4 emission_color : source_color = vec4(0.0, 0.0, 0.0, 1.0);
+uniform float emission_energy = 0.0;
+uniform vec4 recolor : source_color = vec4(1.0, 1.0, 1.0, 0.0);
+uniform vec4 swap_a_rect = vec4(-1.0);
+uniform vec4 swap_a : source_color = vec4(1.0);
+uniform vec4 swap_b_rect = vec4(-1.0);
+uniform vec4 swap_b : source_color = vec4(1.0);
+uniform vec4 swap_c_rect = vec4(-1.0);
+uniform vec4 swap_c : source_color = vec4(1.0);
+bool inside(vec2 uv, vec4 r) {
+	return uv.x >= r.x && uv.x <= r.z && uv.y >= r.y && uv.y <= r.w;
+}
+vec3 swap(vec3 col, vec2 uv, vec4 r, vec4 c) {
+	if (!inside(uv, r)) {
+		return col;
+	}
+	float v = clamp((uv.y - r.y) / max(r.w - r.y, 0.001), 0.0, 1.0);
+	return c.rgb * mix(1.12, 0.62, v);
+}
+void fragment() {
+	vec3 col = texture(tex, UV).rgb;
+	col = swap(col, UV, swap_a_rect, swap_a);
+	col = swap(col, UV, swap_b_rect, swap_b);
+	col = swap(col, UV, swap_c_rect, swap_c);
+	float l0 = dot(col, vec3(0.299, 0.587, 0.114));
+	col = mix(col, recolor.rgb * (0.3 + l0 * 0.8), recolor.a);
+	float l = dot(col, vec3(0.299, 0.587, 0.114));
+	col = mix(vec3(l), col, sat);
+	col = mix(col, vec3(1.0, 0.95, 1.0), lift);
+	ALBEDO = col * tint.rgb * COLOR.rgb;
+	float r = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
+	EMISSION = emission_color.rgb * emission_energy + rim_tint.rgb * r * rim;
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.0;
+}
+"""
+
 const TOON_ALPHA := """
 shader_type spatial;
 render_mode blend_mix, cull_disabled, depth_draw_opaque;
@@ -146,6 +196,7 @@ static func shader(code_name: String) -> Shader:
 		match code_name:
 			"toon": s.code = TOON + TOON_LIGHT
 			"toon_alpha": s.code = TOON_ALPHA + TOON_LIGHT
+			"toon_tex": s.code = TOON_TEX + TOON_LIGHT
 			"ground": s.code = GROUND + TOON_LIGHT
 			"water": s.code = WATER
 			"sky": s.code = SKY

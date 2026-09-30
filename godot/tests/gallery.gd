@@ -30,32 +30,28 @@ func _ready() -> void:
 	floor_mi.material_override = Art.ground_mat(Color("9fdc8f"), Color("7cc97a"))
 	add_child(floor_mi)
 	var models: Array = [
-		Models.hero("witch", Game.ROBE_COLORS[0], Game.HAIR_COLORS[0]),
-		Models.hero("fairy", Game.ROBE_COLORS[1], Game.HAIR_COLORS[1]),
-		Models.hero("elf", Game.ROBE_COLORS[2], Game.HAIR_COLORS[3]),
-		Models.cat(), Models.owl(), Models.unicorn(), Models.dragon(), Models.ghost(),
-		Models.humanoid({"robe": Color("5b8def"), "hair": Color("f0f0f0"), "hat": "wizard", "hair_style": "bob", "extras": ["beard"]}),
-		Models.humanoid({"robe": Color("9aa3b8"), "hat": "helmet", "hair_style": "none", "extras": ["briefcase", "cape"], "accent": Color("e05a7a")}),
-		Models.tiny_clock(),
+		Models.hero("witch", Game.ROBE_COLORS[1], Game.HAIR_COLORS[1]),
+		KayChar.make("Mage", {"items": ["1H_Wand"], "robe": Game.ROBE_COLORS[1], "hair": Game.HAIR_COLORS[1]}),
+		KayChar.make("Mage", {"items": ["1H_Wand"], "robe": Game.ROBE_COLORS[0], "hair": Game.HAIR_COLORS[3]}),
+		KayChar.make("Rogue_Hooded", {"items": [], "robe": Game.ROBE_COLORS[2]}),
+		KayChar.make("Rogue", {"items": []}),
+		KayChar.make("Knight", {"items": []}),
+		KayChar.make("Barbarian", {"items": []}),
 	]
-	for id in ["cloud", "shroom", "pigeon", "umbrella", "bee", "paper", "coffee", "clip", "printer", "email"]:
-		models.append(Models.critter(id))
 	var i := 0
 	for m in models:
-		var col := i % 7
-		var row := i / 7
-		m.position = Vector3(-6.0 + col * 2.0, 0, -2.5 + row * 2.4)
+		m.position = Vector3(-6.0 + i * 2.0, 0, 0)
 		add_child(m)
 		i += 1
-	var boss := Models.monday()
-	boss.position = Vector3(9, 0, 0)
-	add_child(boss)
+	await get_tree().process_frame
+	models[2].moving = true
+	models[3].action("Spellcast_Shoot")
 	var cam := Camera3D.new()
 	cam.fov = 40
-	cam.position = Vector3(1.5, 9, 14)
+	cam.position = Vector3(0, 5.5, 9)
 	add_child(cam)
-	cam.look_at(Vector3(1.5, 0.6, 0.5))
-	for f in 8:
+	cam.look_at(Vector3(0, 0.8, 0))
+	for f in 20:
 		await get_tree().process_frame
 	get_viewport().get_texture().get_image().save_png("user://gallery.png")
 	print("GALLERY SAVED ", ProjectSettings.globalize_path("user://gallery.png"))

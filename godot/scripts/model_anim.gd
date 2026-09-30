@@ -41,6 +41,15 @@ func _ready() -> void:
 		_base_y = _pivot.position.y
 
 
+## One-shot animations only exist on rigged models (see KayChar).
+func action(_name: String, _speed := 1.0, _hold := false) -> void:
+	pass
+
+
+func clear_action() -> void:
+	pass
+
+
 func set_calm(v: bool) -> void:
 	if _brows:
 		_brows.visible = not v
