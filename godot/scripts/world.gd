@@ -72,7 +72,47 @@ func build(id: String) -> void:
 		"cafe_in": _build_cafe_in()
 		"library_in": _build_library_in()
 		"boutique_in": _build_boutique_in()
+	_texture_surfaces(self)
 	batch.flush(self)
+
+
+## Gives big plain walls a painted plaster or brick texture and roofs
+## storybook shingles, keeping each part's pastel color.
+func _texture_surfaces(root: Node) -> void:
+	for c in root.get_children():
+		if c is ModelAnim:
+			continue
+		if c is MeshInstance3D:
+			_texture_part(c as MeshInstance3D)
+		if c.get_child_count() > 0:
+			_texture_surfaces(c)
+
+
+func _texture_part(mi: MeshInstance3D) -> void:
+	var mat := mi.material_override as ShaderMaterial
+	if mat == null or mat.shader != Art.shader("toon"):
+		return
+	var emit = mat.get_shader_parameter("emission_energy")
+	if emit != null and float(emit) > 0.0:
+		return
+	var col = mat.get_shader_parameter("albedo")
+	if col == null or (col as Color).a < 0.99:
+		return
+	var sc := mi.global_transform.basis.get_scale()
+	if mi.mesh is PrismMesh:
+		mi.material_override = Art.mat_surf(col, "shingles", 1.8)
+	elif mi.mesh is BoxMesh:
+		var sz: Vector3 = (mi.mesh as BoxMesh).size * sc
+		if sz.y >= 2.2 and maxf(sz.x, sz.z) >= 2.0:
+			var brick := map_id in ["tower", "roof"] or sz.y >= 6.0
+			mi.material_override = Art.mat_surf(col, "brick" if brick else "plaster", 2.0 if brick else 3.0)
+	elif mi.mesh is CylinderMesh:
+		var cm := mi.mesh as CylinderMesh
+		if cm.top_radius < cm.bottom_radius * 0.5 and cm.bottom_radius * sc.x >= 1.2:
+			# Cone roofs (gazebo, towers) get shingles too.
+			mi.material_override = Art.mat_surf(col, "shingles", 1.6)
+		elif cm.height * sc.y >= 3.0 and maxf(cm.top_radius, cm.bottom_radius) * sc.x >= 1.2:
+			mi.material_override = Art.mat_surf(col, "brick", 2.0)
 
 
 func _process(delta: float) -> void:
@@ -270,9 +310,9 @@ func _build_city() -> void:
 		"tower": DOORS["tower_door"] + Vector3(0, 0, 2.3), "cafe": DOORS["cafe"] + Vector3(0, 0, 1.3),
 		"library": DOORS["library"] + Vector3(0, 0, 1.4), "boutique": DOORS["boutique"] + Vector3(0, 0, 1.4)}
 
-	ground_plane(Vector2(220, 180), Art.ground_mat(Color("86cf78"), Color("68b86a")), 0.0)
+	ground_plane(Vector2(220, 180), Art.ground_mat(Color("86cf78"), Color("68b86a"), 0, 1.3, Color(0.55, 0.5, 0.58), "grass", 3.5), 0.0)
 	_town_streets()
-	var dirt := Art.ground_mat(Color("e0bf8c"), Color("d2ad78"), 0)
+	var dirt := Art.ground_mat(Color("e0bf8c"), Color("d2ad78"), 0, 1.3, Color(0.55, 0.5, 0.58), "dirt", 3.0)
 	slab(Vector3(2.2, 0.03, 19), Vector3(-9, 0.015, 11.0), dirt)
 	slab(Vector3(2.0, 0.03, 19), Vector3(14.5, 0.015, 11.0), dirt)
 	slab(Vector3(2.0, 0.03, 13), Vector3(-22, 0.015, 8.0), dirt)
@@ -461,8 +501,8 @@ const ROAD_W := 4.2
 
 
 func _town_streets() -> void:
-	var plaza := Art.ground_mat(Color("dcb9d6"), Color("cfaacb"), 1, 1.2, Color("a98aa8"))
-	var road := Art.ground_mat(Color("857daa"), Color("766e9c"), 1, 0.9, Color("5b5480"))
+	var plaza := Art.ground_mat(Color("e6c6de"), Color("d8b6d2"), 1, 1.2, Color("9d7f9c"), "cobble", 4.0)
+	var road := Art.ground_mat(Color("8a82ae"), Color("7b739f"), 1, 0.9, Color("5b5480"), "asphalt", 5.0)
 	# Sidewalks
 	slab(Vector3(86, 0.04, 3.8), Vector3(0, 0.02, -6.2), plaza)
 	slab(Vector3(86, 0.04, 1.6), Vector3(0, 0.02, 0.6), plaza)
@@ -962,10 +1002,10 @@ func _build_tower() -> void:
 	cam_max = Vector2(7, 10.5)
 	spawns = {"entrance": Vector3(0, 0, 12.2), "stairs": Vector3(0, 0, -7.8)}
 	ground_plane(Vector2(200, 200), Art.mat(Color("2a1f40")), -0.05)
-	slab(Vector3(26, 0.1, 29), Vector3(0, 0.0, 0), Art.ground_mat(Color("d29a6c"), Color("c0875c"), 2, 0.9, Color("94603e")))
-	var rug := Art.ground_mat(Color("ffb3d1"), Color("ffa3c6"), 0)
+	slab(Vector3(26, 0.1, 29), Vector3(0, 0.0, 0), Art.ground_mat(Color("d8a276"), Color("c68d62"), 2, 0.9, Color("7a4e32"), "planks", 3.5))
+	var rug := Art.ground_mat(Color("ffb3d1"), Color("ffa3c6"), 0, 1.3, Color(0.55, 0.5, 0.58), "fabric", 1.5)
 	slab(Vector3(8, 0.03, 4), Vector3(2, 0.06, 10), rug)
-	slab(Vector3(22, 0.03, 9), Vector3(0, 0.06, 0), Art.ground_mat(Color("93b0e3"), Color("839fd6"), 1, 0.7, Color("6d88c0")))
+	slab(Vector3(22, 0.03, 9), Vector3(0, 0.06, 0), Art.ground_mat(Color("93b0e3"), Color("839fd6"), 1, 0.7, Color("6d88c0"), "fabric", 1.5))
 	var wall := Color("d9c9f2")
 	# North, west, east walls (cutaway: no south wall so the camera can see in)
 	Art.part(self, Art.box(Vector3(26.6, 6, 0.6)), wall, Vector3(0, 3, -14.8))
@@ -1100,7 +1140,7 @@ func _build_roof() -> void:
 	slab(Vector3(1, 1, 1), Vector3(0, -40, 0), Art.mat(Color.BLACK))
 	var floor_mi := MeshInstance3D.new()
 	floor_mi.mesh = Art.cyl(10, 10, 0.6, 48)
-	floor_mi.material_override = Art.ground_mat(Color("c3b8dc"), Color("afa3cc"), 1, 1.0, Color("8f84b0"))
+	floor_mi.material_override = Art.ground_mat(Color("c9bfe0"), Color("b5a9d2"), 1, 1.0, Color("7f74a0"), "flagstone", 6.0)
 	floor_mi.position.y = -0.3
 	add_child(floor_mi)
 	Art.part(self, Art.cyl(10.2, 9.0, 3.0, 48), Color("8f78d0"), Vector3(0, -2.1, 0))
@@ -1181,7 +1221,7 @@ func _room(w: float, d: float, wall: Color, floor_mat: Material, exit_id: String
 		var seg := hw - 1.3
 		Art.part(self, Art.box(Vector3(seg, 0.5, 0.35)), wall.darkened(0.1), Vector3(sx * (1.3 + seg / 2), 0.25, hd + 0.1))
 		Art.collider(self, Vector3(seg, 2, 0.35), Vector3(sx * (1.3 + seg / 2), 1, hd + 0.1))
-	slab(Vector3(2.0, 0.03, 1.0), Vector3(0, 0.07, hd - 0.5), Art.ground_mat(Color("e56b6f"), Color("d45a60"), 0))
+	slab(Vector3(2.0, 0.03, 1.0), Vector3(0, 0.07, hd - 0.5), Art.ground_mat(Color("e56b6f"), Color("d45a60"), 0, 1.3, Color(0.55, 0.5, 0.58), "fabric", 1.2))
 	add_interactable(exit_id, Vector3(0, 0, hd + 0.4), 1.1, "", true)
 	spawns = {"door": Vector3(0, 0, hd - 1.8)}
 	cam_min = Vector2(-maxf(0.0, hw - 6.0), -hd + 3.0)
@@ -1223,7 +1263,7 @@ func _hanging_lamp(p: Vector3, color := Color("ffd98a"), with_light := true) -> 
 
 
 func _build_home_in() -> void:
-	_room(12, 10, Color("ffd9e6"), Art.ground_mat(Color("d29a6c"), Color("c0875c"), 2, 0.9, Color("94603e")), "exit_home")
+	_room(12, 10, Color("ffd9e6"), Art.ground_mat(Color("d8a276"), Color("c68d62"), 2, 0.9, Color("7a4e32"), "planks", 3.5), "exit_home")
 	batch.add_kit("furniture/rug_oval_A", Vector3(0, 0.02, 0.8), 0.0, 1.4, "=#ffc9de")
 	# Cozy bed, couch corner and pictures (KayKit furniture)
 	batch.add_kit("furniture/bed_double_A", Vector3(-4.1, 0, -3.1), 0.0, 0.8, "=#ffd6e6")
@@ -1273,7 +1313,7 @@ func _build_home_in() -> void:
 
 
 func _build_cafe_in() -> void:
-	_room(14, 10, Color("fff1dc"), Art.ground_mat(Color("ffd9c2"), Color("f5c7ae"), 1, 1.0, Color("d9a58c")), "exit_cafe")
+	_room(14, 10, Color("fff1dc"), Art.ground_mat(Color("ffe0cc"), Color("f7ccb5"), 1, 1.0, Color("c9927a"), "tiles", 3.0), "exit_cafe")
 	# Counter
 	Art.part(self, Art.box(Vector3(8, 1.1, 1.0)), Color("c98a5c"), Vector3(0, 0.55, -2.4))
 	Art.part(self, Art.box(Vector3(8.2, 0.12, 1.2)), Color("fff4e0"), Vector3(0, 1.15, -2.4))
@@ -1314,8 +1354,8 @@ func _build_cafe_in() -> void:
 
 
 func _build_library_in() -> void:
-	_room(16, 12, Color("c9d6f2"), Art.ground_mat(Color("8fa6d8"), Color("7f96cc"), 1, 0.8, Color("6a80b8")), "exit_library")
-	slab(Vector3(6, 0.03, 4), Vector3(0, 0.07, 1.0), Art.ground_mat(Color("c38bff"), Color("b47cf0"), 0))
+	_room(16, 12, Color("c9d6f2"), Art.ground_mat(Color("d8a276"), Color("c68d62"), 2, 0.9, Color("7a4e32"), "planks", 3.5), "exit_library")
+	slab(Vector3(6, 0.03, 4), Vector3(0, 0.07, 1.0), Art.ground_mat(Color("b88af0"), Color("a97ce4"), 0, 1.3, Color(0.55, 0.5, 0.58), "fabric", 1.5))
 	for x in [-5.6, -2.8, 2.8, 5.6]:
 		_bookshelf(Vector3(x, 0, -5.6), 0)
 	for z in [-3.0, 0.5, 3.5]:
@@ -1352,8 +1392,8 @@ func _build_library_in() -> void:
 
 
 func _build_boutique_in() -> void:
-	_room(12, 9, Color("f1dcff"), Art.ground_mat(Color("fff0f8"), Color("f5e0ee"), 1, 1.1, Color("e0c0d8")), "exit_boutique")
-	slab(Vector3(4, 0.03, 3), Vector3(0, 0.07, 0.8), Art.ground_mat(Color("ff9fc4"), Color("ff8fb8"), 0))
+	_room(12, 9, Color("f1dcff"), Art.ground_mat(Color("fff2fa"), Color("f7e2f0"), 1, 1.1, Color("d6b0cc"), "tiles", 2.4), "exit_boutique")
+	slab(Vector3(4, 0.03, 3), Vector3(0, 0.07, 0.8), Art.ground_mat(Color("ff9fc4"), Color("ff8fb8"), 0, 1.3, Color(0.55, 0.5, 0.58), "fabric", 1.2))
 	# Clothes racks
 	for rack in [[Vector3(-3.8, 0, -3.3), [Color("7cc8ff"), Color("ffd36b"), Color("ff8fb8"), Color("9fffb8"), Color("c38bff")]],
 			[Vector3(-3.8, 0, 0.8), [Color("ff6b8a"), Color("fff4e0"), Color("5fc9a8"), Color("ffb347"), Color("8f6ee8")]]]:

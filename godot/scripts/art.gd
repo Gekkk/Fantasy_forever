@@ -99,6 +99,38 @@ void fragment() {
 }
 """
 
+## Toon shading with a painted surface texture projected from world space
+## (triplanar), for walls and roofs built from plain boxes.
+const TOON_TRI := """
+shader_type spatial;
+render_mode cull_back;
+uniform vec4 albedo : source_color = vec4(1.0);
+uniform vec4 mortar : source_color = vec4(0.5, 0.45, 0.55, 1.0);
+uniform sampler2D detail : filter_linear_mipmap, repeat_enable;
+uniform float detail_scale = 0.4;
+uniform float rim = 0.25;
+uniform vec4 rim_tint : source_color = vec4(1.0, 0.86, 0.96, 1.0);
+varying vec3 wpos;
+varying vec3 wnrm;
+void vertex() {
+	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+}
+void fragment() {
+	vec3 bl = pow(abs(wnrm), vec3(4.0));
+	bl /= (bl.x + bl.y + bl.z);
+	vec4 d = texture(detail, wpos.zy * detail_scale) * bl.x
+		+ texture(detail, wpos.xz * detail_scale) * bl.y
+		+ texture(detail, wpos.xy * detail_scale) * bl.z;
+	vec3 c = mix(mortar.rgb, albedo.rgb, d.a) * (d.r * 1.25);
+	ALBEDO = c * COLOR.rgb;
+	float r = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
+	EMISSION = rim_tint.rgb * r * rim;
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.0;
+}
+"""
+
 ## Inverted-hull line art drawn over characters and critters (material_overlay).
 const OUTLINE := """
 shader_type spatial;
@@ -139,6 +171,9 @@ uniform vec4 mortar : source_color = vec4(0.6, 0.55, 0.6, 1.0);
 uniform int pattern = 0;
 uniform float scale = 0.18;
 uniform float tile = 1.3;
+uniform sampler2D detail : filter_linear_mipmap, repeat_enable;
+uniform bool has_detail = false;
+uniform float detail_scale = 0.3;
 varying vec3 wpos;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -150,7 +185,14 @@ float noise(vec2 p) {
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
 	vec3 c;
-	if (pattern == 0) {
+	if (has_detail) {
+		// Painted surface texture: RGB = shading, A = stone vs mortar.
+		// Large, soft color drift hides the texture repeat.
+		vec4 d = texture(detail, wpos.xz * detail_scale);
+		float n = noise(wpos.xz * scale) * 0.65 + noise(wpos.xz * scale * 4.0) * 0.35;
+		vec3 base = mix(color_a.rgb, color_b.rgb, n);
+		c = mix(mortar.rgb, base, d.a) * (d.r * 1.25);
+	} else if (pattern == 0) {
 		float n = noise(wpos.xz * scale) * 0.65 + noise(wpos.xz * scale * 5.0) * 0.35;
 		c = mix(color_a.rgb, color_b.rgb, n);
 	} else if (pattern == 1) {
@@ -234,6 +276,7 @@ static func shader(code_name: String) -> Shader:
 			"toon_tex": s.code = TOON_TEX + TOON_LIGHT
 			"slash": s.code = SLASH
 			"outline": s.code = OUTLINE
+			"toon_tri": s.code = TOON_TRI + TOON_LIGHT
 			"ground": s.code = GROUND + TOON_LIGHT
 			"water": s.code = WATER
 			"sky": s.code = SKY
@@ -267,6 +310,21 @@ static func slash_mesh(inner: float, outer: float, span: float) -> ArrayMesh:
 			st.add_vertex(v[0])
 	var m := st.commit()
 	_meshes[key] = m
+	return m
+
+
+## A toon material with a painted surface (plaster, brick, shingles...).
+static func mat_surf(c: Color, surf: String, repeat := 2.5) -> ShaderMaterial:
+	var key := "surf|%s|%s|%.2f" % [c.to_html(false), surf, repeat]
+	if _mats.has(key):
+		return _mats[key]
+	var m := ShaderMaterial.new()
+	m.shader = shader("toon_tri")
+	m.set_shader_parameter("albedo", c)
+	m.set_shader_parameter("mortar", c.darkened(0.35).lerp(Color("6a5080"), 0.3))
+	m.set_shader_parameter("detail", surface(surf))
+	m.set_shader_parameter("detail_scale", 1.0 / repeat)
+	_mats[key] = m
 	return m
 
 
@@ -321,7 +379,22 @@ static func mat(c: Color, emit := 0.0, rim := 0.3) -> ShaderMaterial:
 	return m
 
 
-static func ground_mat(a: Color, b: Color, pattern := 0, tile := 1.3, mortar := Color(0.55, 0.5, 0.58)) -> ShaderMaterial:
+## Tileable painted surfaces (tools/make_surfaces.py), with mipmaps for the web.
+static func surface(name: String) -> Texture2D:
+	var key := "surf_" + name
+	if not _textures.has(key):
+		var src: Texture2D = load("res://textures/surf_%s.png" % name)
+		var img := src.get_image()
+		if img.is_compressed():
+			img.decompress()
+		img.generate_mipmaps()
+		_textures[key] = ImageTexture.create_from_image(img)
+	return _textures[key]
+
+
+## `surf` picks a painted texture (cobble, asphalt, grass, planks, tiles...);
+## `repeat` is how many metres one copy of it covers.
+static func ground_mat(a: Color, b: Color, pattern := 0, tile := 1.3, mortar := Color(0.55, 0.5, 0.58), surf := "", repeat := 3.0) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = shader("ground")
 	m.set_shader_parameter("color_a", a)
@@ -329,6 +402,10 @@ static func ground_mat(a: Color, b: Color, pattern := 0, tile := 1.3, mortar := 
 	m.set_shader_parameter("pattern", pattern)
 	m.set_shader_parameter("tile", tile)
 	m.set_shader_parameter("mortar", mortar)
+	if surf != "":
+		m.set_shader_parameter("detail", surface(surf))
+		m.set_shader_parameter("has_detail", true)
+		m.set_shader_parameter("detail_scale", 1.0 / repeat)
 	return m
 
 
