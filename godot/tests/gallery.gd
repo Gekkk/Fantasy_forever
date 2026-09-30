@@ -30,27 +30,24 @@ func _ready() -> void:
 	floor_mi.material_override = Art.ground_mat(Color("9fdc8f"), Color("7cc97a"))
 	add_child(floor_mi)
 	var models: Array = [
-		Models.hero("witch", Game.ROBE_COLORS[1], Game.HAIR_COLORS[1]),
-		KayChar.make("Mage", {"items": ["1H_Wand"], "robe": Game.ROBE_COLORS[1], "hair": Game.HAIR_COLORS[1]}),
-		KayChar.make("Mage", {"items": ["1H_Wand"], "robe": Game.ROBE_COLORS[0], "hair": Game.HAIR_COLORS[3]}),
-		KayChar.make("Rogue_Hooded", {"items": [], "robe": Game.ROBE_COLORS[2]}),
-		KayChar.make("Rogue", {"items": []}),
-		KayChar.make("Knight", {"items": []}),
-		KayChar.make("Barbarian", {"items": []}),
+		Models.hero("witch", Game.ROBE_COLORS[1], Game.HAIR_COLORS[1], true),
+		Models.hero("fairy", Game.ROBE_COLORS[0], Game.HAIR_COLORS[2], true),
+		Models.hero("elf", Game.ROBE_COLORS[2], Game.HAIR_COLORS[4], true),
+		Models.hero("witch", Game.ROBE_COLORS[3], Game.HAIR_COLORS[0], false),
+		Models.hero("elf", Game.ROBE_COLORS[4], Game.HAIR_COLORS[3], false),
 	]
 	var i := 0
 	for m in models:
-		m.position = Vector3(-6.0 + i * 2.0, 0, 0)
+		m.position = Vector3(-3.2 + i * 1.6, 0, 0)
+		m.rotation_degrees.y = 0
 		add_child(m)
 		i += 1
 	await get_tree().process_frame
-	models[2].moving = true
-	models[3].action("Spellcast_Shoot")
 	var cam := Camera3D.new()
 	cam.fov = 40
-	cam.position = Vector3(0, 5.5, 9)
+	cam.position = Vector3(0, 1.6, 5.2)
 	add_child(cam)
-	cam.look_at(Vector3(0, 0.8, 0))
+	cam.look_at(Vector3(0, 1.1, 0))
 	for f in 20:
 		await get_tree().process_frame
 	get_viewport().get_texture().get_image().save_png("user://gallery.png")

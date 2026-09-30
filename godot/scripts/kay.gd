@@ -62,8 +62,71 @@ func _ready() -> void:
 	if opts.get("wings", false):
 		_add_wings()
 	Art.outline(rig, 0.03)
+	if opts.has("head"):
+		_attach_head(opts["head"])
+	if opts.get("skirt") != null:
+		_attach_skirt(opts["skirt"])
 	anim.play(idle_anim)
 	anim.seek(randf() * 1.0)
+
+
+## Swaps the KayKit head for a cute chibi one (see Models.cute_head), sized
+## and placed from the original head mesh so it fits every body.
+func _attach_head(spec: Dictionary) -> void:
+	var skel: Skeleton3D = rig.find_child("Skeleton3D", true, false)
+	if skel == null or skel.find_bone("head") < 0:
+		return
+	var head_mesh: MeshInstance3D = null
+	for n in rig.find_children("*", "MeshInstance3D", true, false):
+		var nm := String(n.name)
+		if nm.contains("_Head"):
+			head_mesh = n
+		if nm.contains("_Head") or nm in ["Mage_Hat", "Knight_Helmet", "Barbarian_Hat"]:
+			(n as MeshInstance3D).visible = false
+	if head_mesh == null:
+		return
+	var ab := head_mesh.get_aabb()
+	var to_skel := skel.global_transform.affine_inverse() * head_mesh.global_transform
+	var center := to_skel * ab.get_center()
+	var rad := maxf(ab.size.x, ab.size.z) * 0.5 * to_skel.basis.get_scale().x
+	var att := BoneAttachment3D.new()
+	att.bone_name = "head"
+	skel.add_child(att)
+	var h := Models.cute_head(spec)
+	var s := rad / 0.36 * 0.92
+	var rest := skel.get_bone_global_rest(skel.find_bone("head"))
+	h.transform = rest.affine_inverse() * Transform3D(Basis.from_scale(Vector3.ONE * s), center + Vector3(0, rad * 0.08, 0))
+	att.add_child(h)
+	# Outline widths are in mesh space, so undo the head's scale.
+	Art.outline(h, 0.018 / s)
+
+
+## A little flared skirt over the hips.
+func _attach_skirt(col: Color) -> void:
+	var skel: Skeleton3D = rig.find_child("Skeleton3D", true, false)
+	if skel == null or skel.find_bone("hips") < 0:
+		return
+	var body: MeshInstance3D = null
+	for n in rig.find_children("*", "MeshInstance3D", true, false):
+		if String(n.name).ends_with("_Body"):
+			body = n
+	if body == null:
+		return
+	var ab := body.get_aabb()
+	var to_skel := skel.global_transform.affine_inverse() * body.global_transform
+	var lo := to_skel * Vector3(ab.get_center().x, ab.position.y, ab.get_center().z)
+	var w := ab.size.x * to_skel.basis.get_scale().x
+	var h := ab.size.y * to_skel.basis.get_scale().y
+	var att := BoneAttachment3D.new()
+	att.bone_name = "hips"
+	skel.add_child(att)
+	var sk := Node3D.new()
+	var rest := skel.get_bone_global_rest(skel.find_bone("hips"))
+	sk.transform = rest.affine_inverse() * Transform3D(Basis.IDENTITY, lo + Vector3(0, h * 0.12, 0))
+	att.add_child(sk)
+	Art.part(sk, Art.cyl(w * 0.42, w * 0.66, h * 0.36), col, Vector3(0, -h * 0.1, 0))
+	Art.part(sk, Art.cyl(w * 0.67, w * 0.67, h * 0.05), col.lightened(0.35), Vector3(0, -h * 0.28, 0))
+	Art.outline(sk, 0.02)
 
 
 ## The Mage's wand, borrowed for characters that don't carry one.

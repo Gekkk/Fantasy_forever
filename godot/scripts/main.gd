@@ -180,7 +180,11 @@ func _on_preview_changed(style: String, robe: int, hair: int) -> void:
 
 
 func _on_start_new(hero_name: String, style: String, robe: int, hair: int) -> void:
+	var girl: bool = Game.state.get("girl", true)
 	Game.new_game(hero_name, style, robe, hair)
+	Game.state["girl"] = girl
+	Rpg.recalc()
+	Game.full_heal()
 	title.visible = false
 	await _enter_game(true)
 
@@ -375,7 +379,7 @@ func _update_follower(delta: float) -> void:
 
 func _mochi_pounce(e: Enemy) -> void:
 	_mochi_busy = true
-	_mochi_cd = 3.2 * pow(0.7, Game.perk("mochi_power"))
+	_mochi_cd = 3.2 * pow(0.7, Game.perk("mochi_power") + Rpg.role_mod("mochi", 0.0))
 	var start := follower.position
 	var target := e.global_position + (start - e.global_position).normalized() * 0.8
 	Audio.sfx("meow", 0.15, -4.0)
@@ -385,7 +389,7 @@ func _mochi_pounce(e: Enemy) -> void:
 	tw.tween_property(follower, "position", target, 0.08)
 	await tw.finished
 	if is_instance_valid(e) and not e.dead:
-		var dmg := int((5 + int(Game.state["level"]) * 2) * (1.0 + 0.5 * Game.perk("mochi_power")))
+		var dmg := int((5 + int(Game.state["level"]) * 2) * (1.0 + 0.5 * (Game.perk("mochi_power") + Rpg.role_mod("mochi", 0.0))))
 		e.take_damage(dmg, "none", e.global_position - follower.position, "")
 		Art.burst(world, e.global_position + Vector3(0, 0.8, 0), Color("ffe0f0"), 8, "sparkle", 2, 0.4, 0.3)
 	await get_tree().create_timer(0.25).timeout

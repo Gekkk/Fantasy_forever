@@ -11,6 +11,7 @@ var status := ""
 var lifetime := 2.0
 var color := Color("ff9f4c")
 var pierce := 0 # how many extra critters it can pass through
+var mp_on_hit := 0 # the witch's wand bolts refill MP like wand hits
 
 var _t := 0.0
 var _hit: Array = []
@@ -18,7 +19,10 @@ var _hit: Array = []
 
 func _ready() -> void:
 	position.y = 0.9
-	var core := Art.part(self, Art.sphere(0.22 if friendly else 0.26), color, Vector3.ZERO, Vector3.ZERO, Vector3.ONE, 3.0, false)
+	var core := Art.part(self, Art.sphere(0.22 if friendly else 0.26), color, Vector3.ZERO, Vector3.ZERO, Vector3.ONE, 1.1 if friendly else 3.0, false)
+	if friendly:
+		# A soft halo so the colour still reads against bright ground.
+		Art.part(self, Art.sphere(0.34), Color(color, 0.35), Vector3.ZERO, Vector3.ZERO, Vector3.ONE, 0.8, false)
 	core.name = "Core"
 	if not friendly:
 		# A pale ring underneath so enemy shots are easy to read on the ground.
@@ -50,6 +54,8 @@ func _process(delta: float) -> void:
 			if d.length() <= radius + e.hit_radius:
 				_hit.append(e)
 				e.take_damage(damage, element, velocity, status)
+				if mp_on_hit > 0 and _hit.size() == 1:
+					Game.heal(0, mp_on_hit)
 				Art.burst(get_parent(), global_position, color, 10, "sparkle", 2.5, 0.4, 0.3)
 				if _hit.size() > pierce:
 					queue_free()

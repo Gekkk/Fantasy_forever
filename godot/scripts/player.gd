@@ -50,7 +50,7 @@ func rebuild_model() -> void:
 		model.queue_free()
 	var dye = Rpg.robe_dye()
 	var robe: Color = dye if dye != null else Game.robe_color()
-	model = Models.hero(Game.state.get("style", "witch"), robe, Game.hair_color())
+	model = Models.hero(Game.state.get("style", "witch"), robe, Game.hair_color(), bool(Game.state.get("girl", true)))
 	model.rotation.y = rot
 	add_child(model)
 
@@ -188,7 +188,7 @@ func _regen(delta: float) -> void:
 			Game.heal(0, 1)
 	if _hurt_t > 5.0 and Game.combat and not Game.combat.any_aggro_near(global_position, 10.0):
 		_hp_regen += delta
-		var hp_every := 0.25 if Game.perk("cozy_regen") > 0 else 0.5
+		var hp_every := (0.25 if Game.perk("cozy_regen") > 0 else 0.5) / float(Rpg.d("regen"))
 		if _hp_regen >= hp_every:
 			_hp_regen = 0.0
 			if Game.state["hp"] < Game.state["max_hp"]:
@@ -214,39 +214,97 @@ func attack() -> void:
 	_start_swing()
 
 
+## Hits per combo: the elf's daggers chain four, the others three.
+func _combo_len() -> int:
+	return 4 if Rpg.role() == "elf" else 3
+
+
+func _is_finisher() -> bool:
+	return _combo == _combo_len() - 1
+
+
 func _swing_time() -> float:
-	return (0.44 if _combo == 2 else 0.3) / float(Rpg.d("aspd"))
+	var t: float
+	match Rpg.role():
+		"witch": t = 0.4 if _is_finisher() else 0.3
+		"fairy": t = 0.46 if _is_finisher() else 0.34
+		_: t = 0.36 if _is_finisher() else 0.22
+	return t / float(Rpg.d("aspd"))
 
 
 func _start_swing() -> void:
-	_combo = (_combo + 1) % 3 if (_combo_window > 0.0 or state == "attack") else 0
+	_combo = (_combo + 1) % _combo_len() if (_combo_window > 0.0 or state == "attack") else 0
 	state = "attack"
 	_st = 0.0
 	_hit_done = false
 	_queued_attack = false
-	_aim_assist(5.5)
-	velocity = facing() * (5.5 if _combo == 2 else 3.5)
-	Audio.sfx("swing", 0.05, -2.0)
-	model.action(["1H_Melee_Attack_Slice_Diagonal", "1H_Melee_Attack_Slice_Horizontal", "1H_Melee_Attack_Chop"][_combo], 2.2 if _combo < 2 else 1.7)
-	var arm: Node3D = model.find_child("ArmR", true, false)
-	if arm:
-		var tw := create_tween()
-		tw.tween_property(arm, "rotation:x", -2.4, 0.07)
-		tw.tween_property(arm, "rotation:x", 0.7, 0.1)
-		tw.tween_property(arm, "rotation:x", 0.0, 0.12)
+	var fin := _is_finisher()
+	match Rpg.role():
+		"witch":
+			_aim_assist(13.0)
+			velocity = Vector3.ZERO
+			Audio.sfx("sparkle", 0.1, -4.0)
+			model.action("Spellcast_Shoot", 3.0 if not fin else 2.2)
+		"fairy":
+			_aim_assist(5.0)
+			velocity = facing() * (2.0 if not fin else 3.5)
+			Audio.sfx("swing", 0.05, -3.0)
+			model.action(["1H_Melee_Attack_Slice_Diagonal", "1H_Melee_Attack_Slice_Horizontal", "Spellcast_Shoot"][_combo], 2.0)
+		_:
+			_aim_assist(5.0)
+			velocity = facing() * (4.0 if not fin else 6.0)
+			Audio.sfx("swing", 0.08, -1.0)
+			model.action(["Dualwield_Melee_Attack_Slice", "Dualwield_Melee_Attack_Chop", "Dualwield_Melee_Attack_Slice", "Dualwield_Melee_Attack_Stab"][_combo], 2.8 if not fin else 2.0)
+
+
+func _attack_power() -> float:
+	var fin := _is_finisher()
+	var mult: float
+	match Rpg.role():
+		"witch": mult = 0.8 if fin else 0.95 # the finisher fires three
+		"fairy": mult = 1.5 if fin else 0.85
+		_: mult = 1.7 if fin else 0.75
+	if fin:
+		mult += 0.35 * Game.perk("combo_master")
+	return float(Game.state["atk"]) * mult * (1.0 + 0.2 * Game.perk("sparkle_edge"))
 
 
 func _do_hit() -> void:
-	var reach := 2.2 + (0.5 if _combo == 2 else 0.0)
-	var power := (1.8 + 0.35 * Game.perk("combo_master")) if _combo == 2 else 1.0
-	var base := float(Game.state["atk"]) * power * (1.0 + 0.2 * Game.perk("sparkle_edge"))
-	var fwd := facing()
-	_slash_fx(fwd, _combo == 2)
 	if Game.combat == null:
 		return
-	if _combo == 2 and Game.perk("combo_master") > 0:
+	var fwd := facing()
+	var base := _attack_power()
+	var fin := _is_finisher()
+	if fin and Game.perk("combo_master") > 0:
 		Game.combat.hazard("ring", global_position, {"delay": 0.02, "active": 0.5, "damage": int(base * 0.6), "friendly": true,
 			"element": "arcane", "ring_speed": 12.0, "ring_max": 4.5, "color": Color(1.0, 0.7, 0.95)})
+	match Rpg.role():
+		"witch":
+			# Magic bolts from the wand tip; the third shot fans out three stars.
+			var n := 3 if fin else 1
+			for i in n:
+				var d := fwd.rotated(Vector3.UP, (i - (n - 1) / 2.0) * 0.22)
+				var crit := randf() < float(Rpg.d("crit"))
+				var pr: Projectile = Game.combat.projectile(global_position + d * 0.7 + Vector3(0, 0.15, 0), d * 19.0,
+					int(round(base * randf_range(0.9, 1.1) * (2.0 if crit else 1.0))), true,
+					Color("ffe27a") if crit else Color("ff9fe0"), "arcane", "", 0.42 if not fin else 0.5, 0.75)
+				pr.mp_on_hit = int(Rpg.d("mp_hit"))
+		"fairy":
+			# A wide petal wave; every critter it touches heals you a little.
+			_slash_fx(fwd, fin, Color("7ee8b0") if not fin else Color("ff9fd0"), 3.3 if not fin else 3.8)
+			var hits := _melee_hit(fwd, 3.2 if not fin else 3.7, -0.15, base)
+			if hits > 0:
+				var heal := mini(hits, 3) * maxi(1, int(Game.state["max_hp"] * 0.012))
+				Game.heal(heal)
+				Art.float_text(get_parent(), global_position + Vector3(0.3, 2.0, 0), "+%d" % heal, Color("9fffb8"), 48, 0.6, 0.8)
+		_:
+			# Twin daggers: short reach, very fast.
+			_slash_fx(fwd, fin, Color("bfe8ff") if not fin else Color("7cc8ff"), 1.7 if not fin else 2.3)
+			_melee_hit(fwd, 1.9 if not fin else 2.4, 0.2, base)
+
+
+## Hits every critter in a cone in front; returns how many were hit.
+func _melee_hit(fwd: Vector3, reach: float, min_dot: float, base: float) -> int:
 	var hits := 0
 	var crit_hit := false
 	for e in Game.combat.enemies.duplicate():
@@ -256,7 +314,7 @@ func _do_hit() -> void:
 		rel.y = 0
 		if rel.length() > reach + e.hit_radius:
 			continue
-		if rel.length() > 0.8 and fwd.dot(rel.normalized()) < 0.2:
+		if rel.length() > 0.8 and fwd.dot(rel.normalized()) < min_dot:
 			continue
 		var dmg := base * randf_range(0.9, 1.1)
 		if randf() < float(Rpg.d("crit")):
@@ -266,23 +324,25 @@ func _do_hit() -> void:
 		hits += 1
 	if hits > 0:
 		Game.heal(0, int(Rpg.d("mp_hit")))
-		if _combo == 2 or crit_hit:
+		if _is_finisher() or crit_hit:
 			Game.combat.main.hitstop(0.06)
 			Game.combat.main.shake(0.18)
+	return hits
 
 
-func _slash_fx(fwd: Vector3, big: bool) -> void:
+func _slash_fx(fwd: Vector3, big: bool, col := Color("ff4fa8"), reach := 0.0) -> void:
 	var w := get_parent()
 	# A crescent that sweeps with the wand: diagonal, the other way, then a big flat finisher.
 	var arc := MeshInstance3D.new()
-	arc.mesh = Art.slash_mesh(0.9, 2.6 if big else 2.1, deg_to_rad(200.0 if big else 150.0))
+	var outer := reach if reach > 0.0 else (2.6 if big else 2.1)
+	arc.mesh = Art.slash_mesh(outer * 0.4, outer, deg_to_rad(200.0 if big else 150.0))
 	var m := ShaderMaterial.new()
 	m.shader = Art.shader("slash")
-	m.set_shader_parameter("color", Color("ff4fa8") if not big else Color("a86bff"))
+	m.set_shader_parameter("color", col)
 	arc.material_override = m
 	arc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var roll: float = [0.45, -0.35, 0.0][_combo]
-	var flip := -1.0 if _combo == 1 else 1.0
+	var roll: float = 0.0 if big else [0.45, -0.35, 0.3][_combo % 3]
+	var flip := -1.0 if _combo % 2 == 1 else 1.0
 	arc.basis = Basis.looking_at(-fwd, Vector3.UP) * Basis(Vector3.FORWARD, roll) * Basis.from_scale(Vector3(flip, 1, 1))
 	arc.position = global_position + Vector3(0, 1.0 if not big else 0.6, 0) + fwd * 0.35
 	w.add_child(arc)
@@ -354,7 +414,7 @@ func cast(slot: int) -> void:
 			Art.burst(w, global_position + Vector3(0, 0.5, 0), Color("bfe8ff"), 30, "sparkle", rad * 2.0, 0.6, 0.35, Vector3.ZERO)
 		"heal":
 			Audio.sfx("heal")
-			var amt := int(Game.state["max_hp"] * (0.3 + 0.06 * (r - 1))) + int(sp * 0.5)
+			var amt := int((Game.state["max_hp"] * (0.3 + 0.06 * (r - 1)) + sp * 0.5) * float(Rpg.d("heal")))
 			Game.heal(amt)
 			Art.float_text(w, global_position + Vector3(0, 2, 0), "+%d" % amt, Color("9fffb8"), 80)
 			Art.burst(w, global_position + Vector3(0, 0.3, 0), Color("9fffb8"), 26, "heart", 2.5, 1.2, 0.3, Vector3(0, 2, 0))

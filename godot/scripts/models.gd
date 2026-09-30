@@ -67,6 +67,11 @@ static func kay_humanoid(spec: Dictionary) -> ModelAnim:
 		opts["robe"] = spec["hat_color"]
 	if extras.has("wand"):
 		opts["wand"] = true
+	var girl := String(spec.get("hair_style", "")) in ["long", "bun", "pigtails", "bob"] and not extras.has("beard")
+	var hs: String = spec.get("hair_style", "short")
+	opts["head"] = {"hair": spec.get("hair", Color("6b4a3a")), "hair_style": hs, "girl": girl, "hat": spec.get("hat", "none"),
+		"hat_color": spec.get("hat_color", (spec.get("robe", Color("8f6ee8")) as Color).darkened(0.2)), "accent": spec.get("accent", Color("ffd36b")),
+		"extras": extras}
 	return KayChar.make(char, opts)
 
 
@@ -176,15 +181,131 @@ static func classic_humanoid(spec: Dictionary) -> ModelAnim:
 	return root
 
 
+## A cute chibi head (radius 0.36 at the origin, facing +Z) that replaces the
+## KayKit heads: big sparkly eyes, blush, a smile and a choice of hair.
+## spec: skin, hair, hair_style (long|twintails|bob|short|bun|pigtails|none),
+## girl (bool), hat (witch|wizard|circlet|helmet|postman|none), hat_color,
+## accent, extras (ears, beard, glasses, flowers, bow).
+static func cute_head(spec: Dictionary) -> Node3D:
+	var head := Node3D.new()
+	head.name = "CuteHead"
+	var r := 0.36
+	var skin: Color = spec.get("skin", Color("f9c9aa"))
+	var hair: Color = spec.get("hair", Color("6b4a3a"))
+	var girl: bool = spec.get("girl", false)
+	var extras: Array = spec.get("extras", [])
+	var accent: Color = spec.get("accent", Color("ffd36b"))
+	Art.part(head, Art.sphere(r), skin, Vector3.ZERO, Vector3.ZERO, Vector3(1.0, 0.96, 0.98))
+	# Eyes: tall and glossy, two highlights each.
+	var eye_col: Color = spec.get("eye", Color("3a2850"))
+	for sx in [-1, 1]:
+		var e := Art.node(head, "EyeL" if sx < 0 else "EyeR", Vector3(0.34 * r * sx, -0.06 * r, 0.87 * r))
+		Art.part(e, Art.sphere(0.19 * r), eye_col, Vector3.ZERO, Vector3.ZERO, Vector3(0.82, 1.18, 0.45), 0.0, false)
+		Art.part(e, Art.sphere(0.075 * r), Color.WHITE, Vector3(0.045 * r * sx, 0.08 * r, 0.06 * r), Vector3.ZERO, Vector3.ONE, 0.8, false)
+		Art.part(e, Art.sphere(0.035 * r), Color.WHITE, Vector3(-0.05 * r * sx, -0.08 * r, 0.06 * r), Vector3.ZERO, Vector3.ONE, 0.8, false)
+		if girl:
+			# Lashes flick up at the outer corners.
+			for i in 2:
+				Art.part(e, Art.box(Vector3(0.1 * r, 0.03 * r, 0.03 * r)), eye_col, Vector3((0.15 + i * 0.05) * r * sx, (0.17 - i * 0.07) * r, 0.02 * r),
+					Vector3(0, 0, (35 - i * 25) * sx), Vector3.ONE, 0.0, false)
+		else:
+			Art.part(head, Art.box(Vector3(0.22 * r, 0.045 * r, 0.04 * r)), hair.darkened(0.2), Vector3(0.34 * r * sx, 0.24 * r, 0.9 * r),
+				Vector3(0, 0, -8 * sx), Vector3.ONE, 0.0, false)
+		Art.part(head, Art.sphere(0.15 * r), BLUSH, Vector3(0.6 * r * sx, -0.33 * r, 0.74 * r), Vector3.ZERO, Vector3(1.3, 0.6, 0.3), 0.0, false)
+	# A small happy mouth under the eyes.
+	Art.part(head, Art.sphere(0.075 * r), Color("b0506e"), Vector3(0, -0.47 * r, 0.9 * r), Vector3(-10, 0, 0), Vector3(1.3, 0.7, 0.4), 0.0, false)
+	Art.part(head, Art.sphere(0.04 * r), Color("ff9fb5"), Vector3(0, -0.5 * r, 0.93 * r), Vector3.ZERO, Vector3(1.2, 0.6, 0.3), 0.0, false)
+	if extras.has("glasses"):
+		for sx in [-1, 1]:
+			Art.part(head, Art.torus(0.065, 0.085), Color("5a3a6a"), Vector3(0.12 * sx, -0.02, 0.33), Vector3(90, 0, 0), Vector3.ONE, 0.0, false)
+	if extras.has("ears"):
+		for sx in [-1, 1]:
+			Art.part(head, Art.cyl(0.0, 0.07, 0.3), skin, Vector3(0.38 * sx, 0.04, -0.03), Vector3(0, 0, -68 * sx))
+	var style: String = spec.get("hair_style", "long" if girl else "short")
+	if style != "none":
+		# Cap and soft bangs.
+		Art.part(head, Art.sphere(r * 1.08), hair, Vector3(0, 0.035, -0.07))
+		Art.part(head, Art.sphere(r * 0.8), hair, Vector3(0, 0.44 * r, 0.32 * r), Vector3(-10, 0, 0), Vector3(1.3, 0.55, 1.0))
+		for sx in [-1, 1]:
+			Art.part(head, Art.sphere(r * 0.34), hair, Vector3(0.62 * r * sx, 0.1 * r, 0.55 * r), Vector3(0, 0, 20 * sx), Vector3(0.8, 1.3, 0.7))
+		match style:
+			"long":
+				Art.part(head, Art.capsule(0.3, 0.9), hair, Vector3(0, -0.28, -0.16), Vector3(8, 0, 0), Vector3(1.15, 1.0, 0.7))
+				for sx in [-1, 1]:
+					Art.part(head, Art.capsule(0.09, 0.55), hair, Vector3(0.3 * sx, -0.3, 0.1), Vector3(0, 0, 6 * sx))
+			"twintails":
+				for sx in [-1, 1]:
+					Art.part(head, Art.sphere(0.07), accent, Vector3(0.36 * sx, 0.12, -0.12), Vector3.ZERO, Vector3.ONE, 0.3, false)
+					Art.part(head, Art.capsule(0.12, 0.62), hair, Vector3(0.46 * sx, -0.14, -0.16), Vector3(12, 0, -14 * sx))
+			"pigtails":
+				for sx in [-1, 1]:
+					Art.part(head, Art.sphere(0.13), hair, Vector3(0.36 * sx, -0.1, -0.08), Vector3.ZERO, Vector3(1, 1.4, 1))
+			"bun":
+				Art.part(head, Art.sphere(0.16), hair, Vector3(0, 0.36, -0.16))
+			"bob":
+				Art.part(head, Art.sphere(r * 1.12), hair, Vector3(0, -0.06, -0.04), Vector3.ZERO, Vector3(1.04, 0.82, 0.96))
+			"short":
+				Art.part(head, Art.cyl(0.0, 0.07, 0.16), hair, Vector3(0.04, 0.4, 0.02), Vector3(-20, 0, -15))
+				Art.part(head, Art.cyl(0.0, 0.06, 0.13), hair, Vector3(-0.07, 0.39, 0.05), Vector3(-25, 0, 20))
+	if extras.has("beard"):
+		Art.part(head, Art.cyl(0.26, 0.02, 0.55), WHITE, Vector3(0, -0.4, 0.2), Vector3(12, 0, 0))
+		for sx in [-1, 1]:
+			Art.part(head, Art.sphere(0.08), WHITE, Vector3(0.08 * sx, -0.12, 0.33), Vector3.ZERO, Vector3(1.4, 0.7, 0.8))
+	if girl and extras.has("bow") or spec.get("bow", false):
+		var bow := Art.node(head, "Bow", Vector3(0.24, 0.3, -0.05))
+		bow.rotation_degrees = Vector3(0, 20, 25)
+		for sx in [-1, 1]:
+			Art.part(bow, Art.sphere(0.09), accent, Vector3(0.09 * sx, 0, 0), Vector3(0, 0, 30 * sx), Vector3(1.2, 0.8, 0.5))
+		Art.part(bow, Art.sphere(0.04), accent.darkened(0.15), Vector3.ZERO)
+	if extras.has("flowers"):
+		var cols := [Color("ff8fb8"), Color("ffe27a"), Color("ffffff"), Color("c3a6ff"), Color("8fe0c8")]
+		for i in 5:
+			var a := -0.9 + i * 0.45
+			Art.part(head, Art.sphere(0.07), cols[i], Vector3(sin(a) * 0.35, 0.26 + cos(a) * 0.05, cos(a) * 0.1 + 0.03), Vector3.ZERO, Vector3.ONE, 0.3, false)
+	match String(spec.get("hat", "none")):
+		"witch", "wizard":
+			var hat_col: Color = spec.get("hat_color", Color("8f6ee8"))
+			var big := 1.15 if spec.get("hat") == "wizard" else 1.0
+			var hat := Art.node(head, "Hat", Vector3(0, 0.27, -0.02))
+			hat.rotation_degrees.x = -8
+			Art.part(hat, Art.cyl(0.56 * big, 0.56 * big, 0.04), hat_col)
+			Art.part(hat, Art.cyl(0.3 * big, 0.31 * big, 0.08), accent, Vector3(0, 0.05, 0))
+			Art.part(hat, Art.cyl(0.14, 0.31 * big, 0.46 * big), hat_col, Vector3(0, 0.28 * big, 0))
+			Art.part(hat, Art.cyl(0.0, 0.14, 0.34), hat_col, Vector3(0, 0.56 * big, -0.09), Vector3(-35, 0, 0))
+			Art.part(hat, Art.sphere(0.06), Color("ffe27a"), Vector3(0.05, 0.24 * big, 0.27 * big), Vector3.ZERO, Vector3.ONE, 2.0, false)
+		"circlet":
+			Art.part(head, Art.torus(0.32, 0.37), Color("ffd36b"), Vector3(0, 0.13, 0), Vector3(-12, 0, 0), Vector3.ONE, 0.3)
+			Art.part(head, Art.sphere(0.05), Color("7ce8ff"), Vector3(0, 0.21, 0.36), Vector3.ZERO, Vector3.ONE, 1.5, false)
+		"helmet":
+			Art.part(head, Art.sphere(r * 1.12, true), Color("c9cfe0"), Vector3(0, 0.02, -0.02))
+			Art.part(head, Art.box(Vector3(0.06, 0.4, 0.06)), Color("e05a7a"), Vector3(0, 0.45, -0.05))
+		"postman":
+			Art.part(head, Art.cyl(0.24, 0.26, 0.14), Color("4a6fd0"), Vector3(0, 0.3, 0))
+			Art.part(head, Art.cyl(0.26, 0.26, 0.02), Color("2b3f8a"), Vector3(0, 0.24, 0.1), Vector3(-15, 0, 0), Vector3(1, 1, 0.7))
+	return head
+
+
 ## The player's hero, driven by the saved style and colors.
-static func hero(style: String, robe: Color, hair: Color) -> ModelAnim:
+static func hero(style: String, robe: Color, hair: Color, girl := true) -> ModelAnim:
+	var head := {"hair": hair, "girl": girl, "accent": Color("ffd36b")}
 	match style:
 		"fairy":
-			return KayChar.make("Rogue", {"items": [], "wand": true, "wings": true, "robe": robe, "hair": hair, "scale": 0.82})
+			head["hair_style"] = "twintails" if girl else "bob"
+			head["extras"] = ["flowers"]
+			return KayChar.make("Rogue", {"items": [], "wand": true, "wings": true, "robe": robe, "scale": 0.82, "head": head,
+				"skirt": robe if girl else null})
 		"elf":
-			return KayChar.make("Rogue_Hooded", {"items": [], "wand": true, "robe": robe, "hair": hair, "scale": 0.82})
+			head["hair_style"] = "long" if girl else "short"
+			head["hat"] = "circlet"
+			head["extras"] = ["ears", "bow"] if girl else ["ears"]
+			return KayChar.make("Rogue", {"items": ["Knife", "Knife_Offhand"], "robe": robe, "scale": 0.82, "head": head,
+				"skirt": robe if girl else null})
 		_:
-			return KayChar.make("Mage", {"items": ["1H_Wand"], "robe": robe, "hair": hair, "scale": 0.82})
+			head["hair_style"] = "long" if girl else "short"
+			head["hat"] = "witch"
+			head["hat_color"] = robe.darkened(0.1)
+			return KayChar.make("Mage", {"items": ["1H_Wand"], "robe": robe, "scale": 0.82, "head": head,
+				"skirt": robe if girl else null})
 
 
 ## The old primitive-built hero (kept for reference and tests).

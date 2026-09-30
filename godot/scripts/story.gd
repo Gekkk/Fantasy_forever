@@ -704,10 +704,12 @@ func _velour() -> void:
 
 
 func _mirror() -> void:
-	var style_names := ["Witch", "Fairy", "Elf", "Keep my style"]
-	var c := await ask("Magic Mirror", "Mirror, mirror... which look today?", style_names, Color("ffd36b"), 3)
+	var style_names := ["Witch (Spellcaster)", "Fairy (Healer)", "Elf (Blade Dancer)", "Keep my role"]
+	var c := await ask("Magic Mirror", "Mirror, mirror... which role today? (Your skills and gear stay with you.)", style_names, Color("ffd36b"), 3)
 	if c < 3:
 		Game.state["style"] = Game.STYLES[c]
+	var g := await ask("Magic Mirror", "Girl or boy?", ["Girl", "Boy"], Color("ffd36b"), 0 if Game.state.get("girl", true) else 1)
+	Game.state["girl"] = g == 0
 	var robes := ["Lavender", "Rose", "Mint", "Sky", "Peach", "Pearl"]
 	var r := await ask("Magic Mirror", "And your robe color?", robes, Color("ffd36b"), int(Game.state["robe"]))
 	Game.state["robe"] = r
@@ -715,6 +717,7 @@ func _mirror() -> void:
 	var h := await ask("Magic Mirror", "And your hair?", hairs, Color("ffd36b"), int(Game.state["hair"]))
 	Game.state["hair"] = h
 	Audio.sfx("sparkle")
+	Rpg.recalc()
 	m.player.rebuild_model()
 	Art.burst(m.world, m.player.position + Vector3(0, 1, 0), Color("ffd3e6"), 30, "sparkle", 3.0, 1.0, 0.35)
 	await say("Madame Velour", "Magnifique! You look absolutely enchanting.", Color("e05aa8"))

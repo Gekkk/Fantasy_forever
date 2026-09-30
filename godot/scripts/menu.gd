@@ -119,6 +119,8 @@ func _hero() -> void:
 	_clear()
 	var s := Game.state
 	_content.add_child(UI.label("%s   Level %d   (XP %d / %d)" % [s["name"], s["level"], s["xp"], Game.xp_to_next()], 28, Color("e0609f")))
+	var role: Dictionary = Rpg.ROLES[Rpg.role()]
+	_content.add_child(_wide("%s (%s): %s  Change roles at the magic mirror in Velour's Boutique." % [role["name"], role["title"], role["desc"]], 19, Color("6a5a88")))
 	var pts := int(s["attr_points"])
 	var head := _row()
 	head.add_child(UI.icon("gem", 30))

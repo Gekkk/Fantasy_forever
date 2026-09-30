@@ -4,6 +4,31 @@ extends RefCounted
 ## plus passive talents), equipment with rarities and random bonuses, and
 ## the derived combat stats they all feed into (see recalc()).
 
+# ================================================================= roles
+## The three hero roles play differently: how the wand attack works (see
+## Player) and these stat multipliers/bonuses.
+const ROLES := {
+	"witch": {"name": "Witch", "title": "Spellcaster",
+		"desc": "Your wand shoots magic bolts from afar. Stronger spells and more MP, but a little fragile.",
+		"hp": 0.9, "mp": 1.25, "atk": 1.0, "matk": 1.25, "cdr": 0.1},
+	"fairy": {"name": "Fairy", "title": "Healer",
+		"desc": "A petal wave sweeps everything in front of you and heals you a little. Big heals, quick feet, and Mochi fights harder.",
+		"hp": 1.0, "mp": 1.1, "atk": 1.0, "matk": 1.1, "heal": 1.6, "move": 0.1, "regen": 2.0, "mochi": 1},
+	"elf": {"name": "Elf", "title": "Blade Dancer",
+		"desc": "Fast dual-dagger combos up close. More HP, more critical hits, faster swings and a quicker dash.",
+		"hp": 1.15, "mp": 0.9, "atk": 1.25, "matk": 0.9, "crit": 0.08, "aspd": 0.15, "dash": 0.85},
+}
+
+
+static func role() -> String:
+	var r := String(s().get("style", "witch"))
+	return r if ROLES.has(r) else "witch"
+
+
+static func role_mod(key: String, default: float) -> float:
+	return float(ROLES[role()].get(key, default))
+
+
 # ============================================================ attributes
 const ATTRS := ["str", "int", "vit", "agi", "luk"]
 const ATTR_INFO := {
@@ -457,18 +482,20 @@ static func recalc() -> void:
 	var at := {}
 	for a in ATTRS:
 		at[a] = int(st["attr"][a]) + int(eq.get(a, 0))
-	st["max_hp"] = int(b["hp"]) + 10 * int(at["vit"]) + int(eq.get("hp", 0)) + 25 * rank("big_heart")
-	st["max_mp"] = int(b["mp"]) + 4 * int(at["int"]) + int(eq.get("mp", 0)) + 8 * rank("deep_pockets")
-	st["atk"] = int(b["atk"]) + 2 * int(at["str"]) + int(eq.get("atk", 0))
+	st["max_hp"] = int(round((int(b["hp"]) + 10 * int(at["vit"]) + int(eq.get("hp", 0)) + 25 * rank("big_heart")) * role_mod("hp", 1.0)))
+	st["max_mp"] = int(round((int(b["mp"]) + 4 * int(at["int"]) + int(eq.get("mp", 0)) + 8 * rank("deep_pockets")) * role_mod("mp", 1.0)))
+	st["atk"] = int(round((int(b["atk"]) + 2 * int(at["str"]) + int(eq.get("atk", 0))) * role_mod("atk", 1.0)))
 	_d = {
 		"atk": st["atk"],
-		"matk": int(round(float(b["matk"]) + 2.5 * at["int"] + float(eq.get("matk", 0)))),
+		"matk": int(round((float(b["matk"]) + 2.5 * at["int"] + float(eq.get("matk", 0))) * role_mod("matk", 1.0))),
 		"def": int(at["vit"]) + int(eq.get("def", 0)) + 8 * rank("iron_skin"),
-		"crit": 0.05 + 0.01 * at["luk"] + float(eq.get("crit", 0)) / 100.0 + 0.12 * rank("crit"),
-		"move": 1.0 + minf(0.3, 0.012 * at["agi"]) + float(eq.get("move", 0)) / 100.0 + 0.12 * rank("swift"),
-		"aspd": 1.0 + minf(0.4, 0.02 * at["agi"]),
-		"dash": (1.0 - 0.35 * rank("quick_step")) * (1.0 - minf(0.3, 0.015 * at["agi"])),
-		"cdr": minf(0.4, float(eq.get("cdr", 0)) / 100.0),
+		"crit": 0.05 + 0.01 * at["luk"] + float(eq.get("crit", 0)) / 100.0 + 0.12 * rank("crit") + role_mod("crit", 0.0),
+		"move": 1.0 + minf(0.3, 0.012 * at["agi"]) + float(eq.get("move", 0)) / 100.0 + 0.12 * rank("swift") + role_mod("move", 0.0),
+		"aspd": 1.0 + minf(0.4, 0.02 * at["agi"]) + role_mod("aspd", 0.0),
+		"dash": (1.0 - 0.35 * rank("quick_step")) * (1.0 - minf(0.3, 0.015 * at["agi"])) * role_mod("dash", 1.0),
+		"cdr": minf(0.45, float(eq.get("cdr", 0)) / 100.0 + role_mod("cdr", 0.0)),
+		"heal": role_mod("heal", 1.0),
+		"regen": role_mod("regen", 1.0),
 		"fire": 1.0 + float(eq.get("fire", 0)) / 100.0 + 0.3 * rank("fire_heart"),
 		"ice": 1.0 + float(eq.get("ice", 0)) / 100.0,
 		"arcane": 1.0 + float(eq.get("arcane", 0)) / 100.0,

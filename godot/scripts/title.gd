@@ -8,6 +8,9 @@ signal continue_game
 signal preview_changed(style: String, robe: int, hair: int)
 
 var _style := "witch"
+var _girl := true
+var _gender_buttons := {}
+var _role_desc: Label
 var _robe := 0
 var _hair := 0
 var _name: LineEdit
@@ -57,7 +60,7 @@ func _ready() -> void:
 	var h := UI.label("Create your hero", 34, Color("e0609f"))
 	v.add_child(h)
 
-	v.add_child(UI.label("Style", 24, Color("8a6aa8")))
+	v.add_child(UI.label("Role", 24, Color("8a6aa8")))
 	var sr := HBoxContainer.new()
 	sr.add_theme_constant_override("separation", 8)
 	v.add_child(sr)
@@ -69,6 +72,25 @@ func _ready() -> void:
 		b.pressed.connect(_set_style.bind(st))
 		sr.add_child(b)
 		_style_buttons[st] = b
+	_role_desc = UI.label("", 18, Color("6a5a88"))
+	_role_desc.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_role_desc.custom_minimum_size = Vector2(410, 0)
+	v.add_child(_role_desc)
+	var gr := HBoxContainer.new()
+	gr.add_theme_constant_override("separation", 8)
+	v.add_child(gr)
+	for pair in [["Girl", true], ["Boy", false]]:
+		var b := Button.new()
+		b.text = pair[0]
+		b.toggle_mode = true
+		b.custom_minimum_size = Vector2(130, 48)
+		var gv: bool = pair[1]
+		b.pressed.connect(func():
+			_girl = gv
+			Audio.sfx("ui_move")
+			_sync())
+		gr.add_child(b)
+		_gender_buttons[gv] = b
 
 	v.add_child(UI.label("Robe color", 24, Color("8a6aa8")))
 	var rr := HBoxContainer.new()
@@ -156,6 +178,7 @@ func _swatch(c: Color) -> Button:
 
 func refresh(has_save: bool) -> void:
 	_style = Game.state.get("style", "witch")
+	_girl = bool(Game.state.get("girl", true))
 	_robe = int(Game.state.get("robe", 0))
 	_hair = int(Game.state.get("hair", 0))
 	_name.text = Game.state.get("name", Game.DEFAULT_NAME)
@@ -169,6 +192,11 @@ func refresh(has_save: bool) -> void:
 func _sync() -> void:
 	for st in _style_buttons:
 		_style_buttons[st].button_pressed = st == _style
+	for g in _gender_buttons:
+		_gender_buttons[g].button_pressed = g == _girl
+	var role: Dictionary = Rpg.ROLES[_style]
+	_role_desc.text = "%s: %s" % [role["title"], role["desc"]]
+	Game.state["girl"] = _girl
 	for i in _robe_buttons.size():
 		_robe_buttons[i].button_pressed = i == _robe
 	for i in _hair_buttons.size():

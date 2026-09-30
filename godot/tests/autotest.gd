@@ -297,7 +297,8 @@ func _bot_tick(prefer: Callable) -> void:
 		steer(to)
 		await _cast("bolt")
 		return
-	var reach := 1.5 + e.hit_radius
+	# Witches shoot from a distance; fairies sweep from mid-range; elves close in.
+	var reach: float = {"witch": 7.0, "fairy": 2.6}.get(Rpg.role(), 1.5) + e.hit_radius
 	if dist > reach:
 		steer(to)
 		await _frames(2)
@@ -382,7 +383,9 @@ func _run() -> void:
 	seed(12345)
 	await _wait(1.5)
 	await shot("01_title")
-	main.title._set_style("fairy")
+	var role := OS.get_environment("BOT_ROLE") if OS.get_environment("BOT_ROLE") != "" else "witch"
+	main.title._set_style(role)
+	print("BOT ROLE ", role)
 	main.title._set_robe(1)
 	main.title._set_hair(1)
 	main.title._name.text = "Luna"
