@@ -318,6 +318,7 @@ func _shard(id: String) -> void:
 	if count >= Game.SHARD_TOTAL:
 		Game.learn("starfall")
 		Game.finish_side("shards")
+		_reward_item("hat", 3)
 		Audio.sfx("level_up")
 		await say("", "All five Star Shards glow together and swirl around you...", C_SYS)
 		await say("", "You learned STARFALL! Stars rain on every critter nearby and stun them. (Skill 4)", C_SYS)
@@ -343,6 +344,13 @@ func _collect(cid: String) -> void:
 		m.refresh_markers()
 	else:
 		m.ui.toast(Game.side_goal(quest), "star_gold")
+
+
+## Side quests also hand out a piece of shiny gear.
+func _reward_item(slot: String, rarity: int) -> void:
+	var it := Rpg.make_item(slot, int(Game.state["level"]) + 1, rarity)
+	if Rpg.add_to_bag(it):
+		m.ui.toast("Reward: %s! (Menu > Gear)" % it["name"], slot)
 
 
 func _remove_interactable(id: String) -> void:
@@ -539,9 +547,10 @@ func _hoot() -> void:
 			await say("Professor Hoot", "Still missing some books. %s" % Game.side_goal("books"), C_HOOT)
 		"ready":
 			await say("Professor Hoot", "All four! Hoo hoo! As thanks, let me share a bit of my wisdom. Your mind feels... roomier.", C_HOOT)
-			Game.state["max_mp"] += 6
+			Rpg.add_base("mp", 6)
 			Game.add_coins(30)
 			Game.finish_side("books")
+			_reward_item("charm", 2)
 			Audio.sfx("level_up")
 			m.ui.toast("Reward: +6 max MP and 30 coins", "mp")
 		_:
@@ -565,9 +574,10 @@ func _thistle() -> void:
 			await say("Nana Thistle", "Any luck? %s" % Game.side_goal("yarn"), C_NANA)
 		"ready":
 			await say("Nana Thistle", "My yarn! Here, I knitted you a Cozy Scarf while I waited. It's very warm. And very pink.", C_NANA)
-			Game.state["max_hp"] += 20
+			Rpg.add_base("hp", 20)
 			Game.heal(20)
 			Game.finish_side("yarn")
+			_reward_item("robe", 2)
 			Audio.sfx("level_up")
 			m.ui.toast("Reward: Cozy Scarf, +20 max HP", "hp")
 		_:
@@ -587,9 +597,10 @@ func _poppy() -> void:
 			await say("Poppy", "Thank you for helping! %s" % Game.side_goal("garden"), C_POPPY)
 		"ready":
 			await say("Poppy", "The flowers are dancing again! Here, a Flower Crown. Wearing flowers makes everyone stronger. Science!", C_POPPY)
-			Game.state["atk"] += 3
+			Rpg.add_base("atk", 3)
 			Game.add_item("muffin", 3)
 			Game.finish_side("garden")
+			_reward_item("wand", 2)
 			Audio.sfx("level_up")
 			m.ui.toast("Reward: Flower Crown, +3 power and 3 muffins", "star_gold")
 		_:
@@ -613,6 +624,7 @@ func _marina() -> void:
 			Game.set_flag("pearl_charm")
 			Game.add_item("tea", 3)
 			Game.finish_side("pearl")
+			_reward_item("charm", 2)
 			Audio.sfx("level_up")
 			m.ui.toast("Reward: Tidal Charm (faster MP) and 3 Moon Teas", "tea")
 		_:
@@ -653,8 +665,41 @@ func _nyx() -> void:
 
 
 func _velour() -> void:
-	await say("Madame Velour", "Bienvenue, darling! Every hero deserves a signature look.", Color("e05aa8"))
-	await say("Madame Velour", "Step up to the magic mirror and try anything you like. First fitting is free. So are all the others.", Color("e05aa8"))
+	var cv := Color("e05aa8")
+	await say("Madame Velour", "Bienvenue, darling! Every hero deserves a signature look. The mirror is free; my enchanted gear is... not.", cv)
+	var shop: Dictionary = Game.state.get("shop", {})
+	if int(shop.get("quest", -1)) != q():
+		# New stock every chapter.
+		shop = {"quest": q(), "items": []}
+		for i in 4:
+			shop["items"].append(Rpg.random_item(int(Game.state["level"]) + 1, 0.4, 1 + int(i == 3)))
+		Game.state["shop"] = shop
+	while true:
+		var items: Array = shop["items"]
+		var opts: Array = []
+		for it in items:
+			opts.append("%s (%d coins)" % [it["name"], int(it["price"])])
+		opts.append("Just looking, thanks")
+		var c := await ask("Madame Velour", "What catches your eye? (You have %d coins)" % Game.state["coins"], opts, cv, opts.size() - 1)
+		if c >= items.size():
+			await say("Madame Velour", "Au revoir, darling! Come back when the collection changes.", cv)
+			return
+		var it: Dictionary = items[c]
+		var lines := Rpg.item_lines(it)
+		var desc := "%s %s. %s" % [Rpg.RARITY[int(it["rarity"])]["name"], Rpg.SLOT_NAMES[it["slot"]], ", ".join(lines)]
+		var yes := await ask("Madame Velour", desc, ["Buy it!", "Maybe not"], cv)
+		if yes != 0:
+			continue
+		if int(Game.state["coins"]) < int(it["price"]):
+			await say("Madame Velour", "Ah, a little short, darling. Critters drop coins, you know.", cv)
+			continue
+		if not Rpg.add_to_bag(it):
+			await say("Madame Velour", "Your bag is bursting! Sell something first (Menu > Gear).", cv)
+			return
+		Game.add_coins(-int(it["price"]))
+		items.remove_at(c)
+		Audio.sfx("coin")
+		m.ui.toast("Bought %s! Equip it in Menu > Gear." % it["name"], it["slot"])
 
 
 func _mirror() -> void:

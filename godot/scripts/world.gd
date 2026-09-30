@@ -105,6 +105,8 @@ func add_npc(id: String, model: ModelAnim, pos: Vector3, rot_y: float, prompt: S
 	model.position = pos
 	model.rotation_degrees.y = rot_y
 	add_child(model)
+	if not model is KayChar:
+		Art.outline(model, 0.022)
 	npcs[id] = model
 	add_interactable(id, pos, radius, prompt)
 	Art.collider_round(self, 0.35, 1.2, pos)
@@ -431,12 +433,17 @@ func _build_city() -> void:
 	var west := Rect2(-38, 4, 28, 12.5)
 	var east := Rect2(10.5, 4, 27, 12.5)
 	var meadow := Rect2(-36, 23, 72, 5)
+	# Once you've started work, a few elites (Swift, Armored, Blazing) roam the park.
+	var elite_chance := 0.0 if Game.state["quest"] < 3 else 0.14
+	for i in 6:
+		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-36, -12), 0, randf_range(5, 15)), "area": west,
+			"elite": randf() < elite_chance})
 	for i in 5:
-		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-36, -12), 0, randf_range(5, 15)), "area": west})
-	for i in 4:
-		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(12, 36), 0, randf_range(5, 15)), "area": east})
-	for i in 4:
-		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-34, 34), 0, randf_range(23.5, 27.5)), "area": meadow})
+		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(12, 36), 0, randf_range(5, 15)), "area": east,
+			"elite": randf() < elite_chance})
+	for i in 6:
+		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-34, 34), 0, randf_range(23.5, 27.5)), "area": meadow,
+			"elite": randf() < elite_chance * 1.5})
 
 
 # ============================================================ TOWN GRID

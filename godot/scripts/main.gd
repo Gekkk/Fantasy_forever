@@ -31,7 +31,6 @@ var _title_t := 0.0
 var _shake := 0.0
 var _in_fight := false
 var _fight_target: Enemy
-var _perk_showing := false
 var _mochi_cd := 2.0
 var _mochi_heal_cd := 0.0
 var _mochi_busy := false
@@ -54,13 +53,18 @@ func _ready() -> void:
 	env.glow_bloom = 0.0
 	env.glow_hdr_threshold = 1.0
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
+	# A gentle grade: a touch more contrast and color for a finished look.
+	env.adjustment_enabled = true
+	env.adjustment_contrast = 1.06
+	env.adjustment_saturation = 1.1
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 45.0
-	sun.shadow_blur = 1.5
+	sun.directional_shadow_max_distance = 36.0
+	sun.shadow_blur = 2.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	add_child(sun)
 	cam = Camera3D.new()
 	cam.fov = 40
@@ -97,7 +101,7 @@ func _ready() -> void:
 # Big PC screens (1440p, 4K, Retina) make the browser draw 2-4x more pixels
 # than a phone. Render 3D at roughly 720p-level pixel count and upscale; UI
 # stays crisp. If it's still slow, step quality down automatically.
-const TARGET_PIXELS := 1280.0 * 720.0 * 1.25
+const TARGET_PIXELS := 1600.0 * 900.0 * 1.2
 var quality_level := 0
 var _fps_timer := 0.0
 var _fps_samples: Array = []
@@ -116,7 +120,8 @@ func _update_render_scale() -> void:
 	var s := clampf(sqrt(TARGET_PIXELS / area), 0.4, 1.0)
 	s *= [1.0, 0.8, 0.65][quality_level]
 	vp.scaling_3d_scale = s
-	vp.msaa_3d = Viewport.MSAA_2X if (s >= 0.99 and quality_level == 0) else Viewport.MSAA_DISABLED
+	# Smooth edges: 4x MSAA normally, 2x once the game has had to slow down.
+	vp.msaa_3d = [Viewport.MSAA_4X, Viewport.MSAA_2X, Viewport.MSAA_DISABLED][quality_level]
 
 
 func _watch_fps(delta: float) -> void:
@@ -228,6 +233,7 @@ func load_map(id: String, spawn: Vector3, fade := true) -> void:
 	player.downed.connect(_on_player_down)
 	follower = Models.cat()
 	world.add_child(follower)
+	Art.outline(follower, 0.02)
 	follower.position = spawn + Vector3(-0.8, 0, 0.8)
 	for s in world.critter_spawns:
 		combat.spawn_enemy(s["id"], s["pos"], s["area"], s.get("uid", ""), false, s.get("elite", false))
@@ -299,9 +305,6 @@ func _process(delta: float) -> void:
 	ui.update_combat(player)
 	if mode != Mode.EXPLORE:
 		ui.show_prompt("")
-		return
-	if int(Game.state.get("pending_perks", 0)) > 0 and not _perk_showing:
-		_show_perk_choice()
 		return
 	_nearest = {}
 	if _in_fight:
@@ -509,27 +512,6 @@ func _wake_up_at_home() -> void:
 	Audio.play_music(MUSIC.get(world.map_id, "town"), 0.5)
 	await ui.fade_in(0.6)
 	await ui.say("Mochi", "Mrrow. You dozed off out there, so I dragged you home. You're welcome. (HP and MP restored!)")
-
-
-# =============================================================== perks
-func queue_perk_choice() -> void:
-	pass # picked up in _process once it's safe to pause
-
-
-func _show_perk_choice() -> void:
-	_perk_showing = true
-	get_tree().paused = true
-	var choices := Game.perk_choices()
-	if choices.is_empty():
-		Game.state["pending_perks"] = 0
-	else:
-		var id: String = await ui.choose_perk(choices)
-		Game.add_perk(id)
-		Game.state["pending_perks"] = maxi(0, int(Game.state["pending_perks"]) - 1)
-		Art.burst(world, player.position + Vector3(0, 1, 0), Color("ffe27a"), 30, "star", 4, 1.0, 0.35)
-	get_tree().paused = false
-	_perk_showing = false
-	Game.save_game()
 
 
 # ================================================================= menu

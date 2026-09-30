@@ -10,7 +10,7 @@ var element := "none"
 var status := ""
 var lifetime := 2.0
 var color := Color("ff9f4c")
-var pierce := false
+var pierce := 0 # how many extra critters it can pass through
 
 var _t := 0.0
 var _hit: Array = []
@@ -51,7 +51,7 @@ func _process(delta: float) -> void:
 				_hit.append(e)
 				e.take_damage(damage, element, velocity, status)
 				Art.burst(get_parent(), global_position, color, 10, "sparkle", 2.5, 0.4, 0.3)
-				if not pierce:
+				if _hit.size() > pierce:
 					queue_free()
 					return
 	else:

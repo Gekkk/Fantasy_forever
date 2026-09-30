@@ -84,7 +84,20 @@ func hazard(shape: String, pos: Vector3, opts: Dictionary) -> Hazard:
 	return h
 
 
-func drop_loot(pos: Vector3, xp: int, coins: int) -> void:
+func drop_loot(pos: Vector3, xp: int, coins: int, tier := 0) -> void:
+	# Gear: sometimes from critters, often from elites, always from bosses.
+	var ilvl := int(Game.state["level"]) + tier
+	var find := float(Rpg.d("find"))
+	match tier:
+		0:
+			if randf() < 0.08 * find:
+				_pickup("item", pos, 0, Rpg.random_item(ilvl, 0.1 * (find - 1.0)))
+		1:
+			if randf() < 0.55 * find:
+				_pickup("item", pos, 0, Rpg.random_item(ilvl, 0.3, 1))
+		2:
+			for i in 2:
+				_pickup("item", pos, 0, Rpg.random_item(ilvl, 0.6, 2))
 	var orbs := clampi(xp / 3, 1, 8)
 	for i in orbs:
 		_pickup("xp", pos, xp / orbs + (1 if i < xp % orbs else 0))
@@ -102,10 +115,11 @@ func drop_loot(pos: Vector3, xp: int, coins: int) -> void:
 		_pickup("heart", pos, 12)
 
 
-func _pickup(kind: String, pos: Vector3, value: int) -> void:
+func _pickup(kind: String, pos: Vector3, value: int, item := {}) -> void:
 	var p := Pickup.new()
 	p.kind = kind
 	p.value = value
+	p.item = item
 	p.position = pos
 	world().add_child.call_deferred(p)
 
@@ -119,8 +133,9 @@ func gain_xp(n: int) -> void:
 		if pl:
 			Art.burst(world(), pl.global_position + Vector3(0, 1, 0), Color("ffe27a"), 40, "star", 5, 1.3, 0.4, Vector3(0, 1, 0))
 			Art.float_text(world(), pl.global_position + Vector3(0, 2.4, 0), "LEVEL UP!", Color("ffe27a"), 90, 1.5, 1.6)
-		main.ui.toast("Level %d! Choose a new perk." % Game.state["level"], "star_gold")
-		main.queue_perk_choice()
+		main.ui.toast("Level %d! +%d attribute and +%d skill points (Menu)" % [Game.state["level"],
+			Rpg.ATTR_PER_LEVEL * gained, Rpg.SKILL_POINTS_PER_LEVEL * gained], "gem")
+		main.ui.refresh()
 
 
 func on_calmed(e: Enemy) -> void:

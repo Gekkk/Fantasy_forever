@@ -214,6 +214,17 @@ static func label(text: String, size := 26, color := INK) -> Label:
 
 # ------------------------------------------------------------------- HUD
 func _build_hud() -> void:
+	# A soft vignette frames the scene (drawn under the HUD).
+	var vig := ColorRect.new()
+	vig.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vig.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var vm := ShaderMaterial.new()
+	var vs := Shader.new()
+	vs.code = "shader_type canvas_item;\nvoid fragment() {\n\tvec2 d = UV - vec2(0.5);\n\tfloat v = smoothstep(0.42, 0.85, length(d * vec2(1.25, 1.0)));\n\tCOLOR = vec4(0.18, 0.08, 0.28, v * 0.38);\n}\n"
+	vm.shader = vs
+	vig.material = vm
+	add_child(vig)
+	move_child(vig, 0)
 	hud = Control.new()
 	hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -293,6 +304,10 @@ func refresh() -> void:
 	_muffins.text = str(Game.item_count("muffin"))
 	_shards.text = "%d/%d" % [s["shards"].size(), Game.SHARD_TOTAL]
 	_objective.text = ("%s:  %s" % [Game.chapter_title(), Game.objective()]) if Game.objective() != "" else Game.chapter_title()
+	# Unspent attribute or skill points: make the Menu button glow.
+	var unspent := int(s.get("attr_points", 0)) + int(s.get("skill_points", 0)) > 0
+	menu_button.text = "Menu  +" if unspent else "Menu"
+	menu_button.modulate = Color(1.0, 0.85, 0.4) if unspent else Color.WHITE
 	if _xp_bar:
 		_xp_bar.max_value = Game.xp_to_next()
 		_xp_bar.value = s["xp"]
@@ -654,9 +669,8 @@ func _build_combat_hud() -> void:
 	bottom.add_child(_skill_bar)
 	bottom.visible = not touch
 	var keys := ["1", "2", "3", "4"]
-	for i in Game.SKILL_ORDER.size():
-		var sid: String = Game.SKILL_ORDER[i]
-		_slots.append(_slot(Game.SKILLS[sid]["icon"], keys[i], "skill", sid))
+	for i in 4:
+		_slots.append(_slot("unknown", keys[i], "skill", str(i)))
 	_slots.append(_slot("swing", "Shift", "dash", "dash"))
 	_slots.append(_slot("muffin", "H", "item", "muffin"))
 	_slots.append(_slot("tea", "T", "item", "tea"))
@@ -735,14 +749,17 @@ func update_combat(p: Player) -> void:
 		var frac := 0.0
 		match String(s["kind"]):
 			"skill":
-				var sid: String = s["id"]
-				var sk: Dictionary = Game.SKILLS[sid]
-				var learned: bool = Game.state["spells"].has(sid)
+				var sid := Rpg.slot_skill(int(s["id"]))
+				var learned := sid != ""
+				var want: String = Rpg.ACTIVES[sid]["icon"] if learned else "unknown"
+				if s.get("shown", "") != want:
+					s["shown"] = want
+					ic.texture = Art.tex(want)
 				ic.modulate = Color.WHITE if learned else Color(1, 1, 1, 0.2)
-				cost.text = str(sk["mp"]) if learned else "?"
+				cost.text = str(Rpg.skill_mp(sid)) if learned else ""
 				if learned:
-					frac = float(p.skill_cd.get(sid, 0.0)) / float(sk["cd"])
-					if Game.state["mp"] < int(sk["mp"]):
+					frac = float(p.skill_cd.get(sid, 0.0)) / Rpg.skill_cd(sid)
+					if Game.state["mp"] < Rpg.skill_mp(sid):
 						ic.modulate = Color(0.6, 0.6, 1.0, 0.6)
 			"dash":
 				frac = p.dash_ready() / 0.75
@@ -764,52 +781,3 @@ func boss_bar(boss_name: String, ratio: float, weak: String, known: bool) -> voi
 	_boss_name.text = boss_name
 	_boss_hp.value = ratio
 	_boss_weak.texture = Art.tex(weak if known else "unknown")
-
-
-# ---------------------------------------------------------- perk picker
-signal _perk_picked(id: String)
-
-
-## Shows three perk cards (the game is paused meanwhile) and returns the chosen id.
-func choose_perk(ids: Array) -> String:
-	var root := Control.new()
-	root.theme = theme
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(root)
-	var dim := ColorRect.new()
-	dim.color = Color(0.2, 0.1, 0.3, 0.6)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.add_child(dim)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 18)
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	full_center(root).add_child(v)
-	var t := label("Level %d! Choose a perk" % Game.state["level"], 52, Color("fff3c4"))
-	t.add_theme_color_override("font_outline_color", Color("6a3a8a"))
-	t.add_theme_constant_override("outline_size", 16)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(t)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 18)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.add_child(row)
-	var first: Button
-	for id in ids:
-		var pk: Dictionary = Game.PERKS[id]
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(300, 190)
-		b.text = "%s\n\n%s%s" % [pk["name"], pk["desc"], ("\n(Rank %d/%d)" % [Game.perk(id) + 1, pk["max"]]) if int(pk["max"]) > 1 else ""]
-		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		b.add_theme_font_size_override("font_size", 25)
-		var perk_id: String = id
-		b.pressed.connect(func():
-			Audio.sfx("level_up")
-			_perk_picked.emit(perk_id))
-		row.add_child(b)
-		if first == null:
-			first = b
-	first.grab_focus.call_deferred()
-	Audio.sfx("sparkle")
-	var picked: String = await _perk_picked
-	root.queue_free()
-	return picked

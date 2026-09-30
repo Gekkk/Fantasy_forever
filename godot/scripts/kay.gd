@@ -61,6 +61,7 @@ func _ready() -> void:
 		m.material_override = _material_for(m)
 	if opts.get("wings", false):
 		_add_wings()
+	Art.outline(rig, 0.03)
 	anim.play(idle_anim)
 	anim.seek(randf() * 1.0)
 

@@ -19,19 +19,6 @@ const HAIR_COLORS := [Color("6b4a3a"), Color("f5d47a"), Color("ff9fc4"), Color("
 const ELEMENT_NAMES := {"fire": "Fire", "ice": "Ice", "arcane": "Sparkle"}
 const ELEMENT_COLORS := {"fire": Color("ff8a4c"), "ice": Color("7cc8ff"), "arcane": Color("ff8fd8"), "none": Color("ffffff")}
 
-# Real-time skills. Slot order = button order.
-const SKILL_ORDER := ["flame", "frost", "heal", "starfall"]
-const SKILLS := {
-	"flame": {"name": "Flame Petal", "mp": 5, "cd": 2.2, "element": "fire", "icon": "fire",
-		"desc": "Throw three fiery petals. Burns critters over time."},
-	"frost": {"name": "Frost Bloom", "mp": 6, "cd": 5.0, "element": "ice", "icon": "ice",
-		"desc": "An icy ring around you. Freezes critters in place."},
-	"heal": {"name": "Heal Glow", "mp": 8, "cd": 9.0, "element": "none", "icon": "hp",
-		"desc": "Restore a big chunk of HP."},
-	"starfall": {"name": "Starfall", "mp": 14, "cd": 12.0, "element": "arcane", "icon": "star_gold",
-		"desc": "Stars rain on every critter nearby and stun them."},
-}
-
 const ITEMS := {
 	"muffin": {"name": "Pumpkin Muffin", "desc": "Restores 50 HP. (Menu or H key)", "price": 8, "icon": "muffin"},
 	"tea": {"name": "Moon Tea", "desc": "Restores 15 MP. (Menu or T key)", "price": 10, "icon": "tea"},
@@ -62,9 +49,9 @@ const ENEMIES := {
 		"xp": 15, "coins": 7, "calm": "unsubscribes itself peacefully."},
 	"tick": {"name": "Tick-Tock", "hp": 35, "dmg": 10, "speed": 3.4, "behavior": "melee", "weak": "ice",
 		"xp": 4, "coins": 1, "calm": "stops ticking and yawns."},
-	"printer_king": {"name": "The Printer King", "hp": 900, "dmg": 16, "speed": 1.8, "behavior": "boss", "weak": "arcane",
+	"printer_king": {"name": "The Printer King", "hp": 1500, "dmg": 20, "speed": 1.9, "behavior": "boss", "weak": "arcane",
 		"xp": 90, "coins": 50, "calm": "finally finishes printing... a paper crown for you."},
-	"monday": {"name": "The Monday Monster", "hp": 2400, "dmg": 18, "speed": 2.4, "behavior": "boss", "weak": "ice",
+	"monday": {"name": "The Monday Monster", "hp": 3800, "dmg": 24, "speed": 2.5, "behavior": "boss", "weak": "ice",
 		"xp": 200, "coins": 100, "calm": "yawns and turns back into a sleepy little clock."},
 }
 
@@ -73,22 +60,6 @@ const OFFICE_POOL := ["paper", "coffee", "clip", "printer", "email"]
 const FRIENDBOOK := ["cloud", "shroom", "pigeon", "umbrella", "bee", "paper", "coffee", "clip", "printer", "email",
 	"tick", "printer_king", "monday"]
 const SHARD_TOTAL := 5
-
-const PERKS := {
-	"sparkle_edge": {"name": "Sparkle Edge", "desc": "Wand hits deal +20% damage.", "max": 3},
-	"fire_heart": {"name": "Fire Heart", "desc": "Flame Petal deals +30% damage and burns longer.", "max": 2},
-	"frost_touch": {"name": "Frost Touch", "desc": "Frost Bloom is 25% bigger and freezes longer.", "max": 2},
-	"quick_step": {"name": "Quick Step", "desc": "Your dash recharges 35% faster.", "max": 2},
-	"star_trail": {"name": "Star Trail", "desc": "Dashing leaves a trail of stinging sparkles.", "max": 1},
-	"big_heart": {"name": "Big Heart", "desc": "+25 max HP.", "max": 3},
-	"deep_pockets": {"name": "Deep Pockets", "desc": "+8 max MP.", "max": 3},
-	"mana_bloom": {"name": "Mana Bloom", "desc": "Wand hits restore 1 more MP.", "max": 2},
-	"mochi_power": {"name": "Mochi Power", "desc": "Mochi pounces more often and harder.", "max": 2},
-	"lucky_star": {"name": "Lucky Star", "desc": "+50% coins and more muffin drops.", "max": 2},
-	"cozy_regen": {"name": "Cozy Regen", "desc": "Regenerate HP twice as fast when safe.", "max": 1},
-	"crit": {"name": "Crit Sparkle", "desc": "12% chance to deal double damage.", "max": 2},
-	"swift": {"name": "Swift Shoes", "desc": "Move 12% faster.", "max": 2},
-}
 
 # Main quest chapters.
 const QUESTS := [
@@ -171,11 +142,13 @@ func new_game(hero_name: String, style: String, robe: int, hair: int) -> void:
 		"level": 1, "xp": 0, "hp": 60, "max_hp": 60, "mp": 24, "max_mp": 24, "atk": 10,
 		"coins": 10, "items": {"muffin": 2, "tea": 1}, "spells": [],
 		"quest": 0, "flags": {}, "shards": [], "friends": {}, "known_weak": {},
-		"perks": {}, "pending_perks": 0, "side": {"shards": {"state": "active", "count": 0}},
+		"side": {"shards": {"state": "active", "count": 0}},
 		"collected": [], "park_calmed": 0,
 		"map": "home_in", "pos": [-2.2, -1.2],
 	}
-	stats_changed.emit()
+	Rpg.init_state(state)
+	Rpg.recalc()
+	full_heal()
 
 
 func has_save() -> bool:
@@ -203,14 +176,15 @@ func load_game() -> bool:
 	for k in data:
 		state[k] = data[k]
 	# JSON turns ints into floats; tidy the integer stats back up.
-	for k in ["level", "xp", "hp", "max_hp", "mp", "max_mp", "atk", "coins", "quest", "robe", "hair",
-			"pending_perks", "park_calmed"]:
+	for k in ["level", "xp", "hp", "max_hp", "mp", "max_mp", "atk", "coins", "quest", "robe", "hair", "park_calmed"]:
 		state[k] = int(state[k])
 	for dict_key in ["items", "friends", "perks"]:
-		for k in state[dict_key]:
+		for k in state.get(dict_key, {}):
 			state[dict_key][k] = int(state[dict_key][k])
 	for k in state["side"]:
 		state["side"][k]["count"] = int(state["side"][k]["count"])
+	Rpg.migrate(state)
+	Rpg.recalc()
 	stats_changed.emit()
 	return true
 
@@ -259,54 +233,29 @@ func item_count(id: String) -> int:
 
 
 func learn(spell: String) -> void:
-	if not state["spells"].has(spell):
-		state["spells"].append(spell)
-	stats_changed.emit()
+	Rpg.learn(spell)
 
 
+## Rank of a talent (or skill); the old perks live on as talents.
 func perk(id: String) -> int:
-	return int(state["perks"].get(id, 0))
-
-
-func add_perk(id: String) -> void:
-	state["perks"][id] = perk(id) + 1
-	match id:
-		"big_heart":
-			state["max_hp"] += 25
-			state["hp"] += 25
-		"deep_pockets":
-			state["max_mp"] += 8
-			state["mp"] += 8
-	stats_changed.emit()
-
-
-## Three random perks that aren't maxed out yet.
-func perk_choices() -> Array:
-	var pool: Array = []
-	for id in PERKS:
-		if perk(id) < int(PERKS[id]["max"]):
-			pool.append(id)
-	pool.shuffle()
-	return pool.slice(0, 3)
+	return Rpg.rank(id)
 
 
 func xp_to_next() -> int:
 	return 25 * int(state["level"])
 
 
-## Adds XP and returns how many levels were gained. Each level also grants a perk pick.
+## Adds XP and returns how many levels were gained. Each level grants attribute and skill points.
 func add_xp(n: int) -> int:
 	state["xp"] += n
 	var gained := 0
 	while state["xp"] >= xp_to_next():
 		state["xp"] -= xp_to_next()
 		state["level"] += 1
-		state["max_hp"] += 10
-		state["max_mp"] += 3
-		state["atk"] += 2
-		state["pending_perks"] += 1
+		Rpg.on_level_up()
 		gained += 1
 	if gained > 0:
+		Rpg.recalc()
 		full_heal()
 	stats_changed.emit()
 	return gained

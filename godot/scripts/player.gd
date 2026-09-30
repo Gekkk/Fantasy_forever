@@ -27,6 +27,9 @@ var _trail_t := 0.0
 var _step_timer := 0.0
 var _dust_timer := 0.0
 var _warn_t := 0.0
+var barrier := 0
+var _barrier_t := 0.0
+var _bubble: MeshInstance3D
 
 
 func _ready() -> void:
@@ -45,7 +48,9 @@ func rebuild_model() -> void:
 	if model:
 		rot = model.rotation.y
 		model.queue_free()
-	model = Models.hero(Game.state.get("style", "witch"), Game.robe_color(), Game.hair_color())
+	var dye = Rpg.robe_dye()
+	var robe: Color = dye if dye != null else Game.robe_color()
+	model = Models.hero(Game.state.get("style", "witch"), robe, Game.hair_color())
 	model.rotation.y = rot
 	add_child(model)
 
@@ -98,6 +103,11 @@ func _process(delta: float) -> void:
 	invuln = maxf(0.0, invuln - delta)
 	_hurt_t += delta
 	_warn_t -= delta
+	if _barrier_t > 0.0:
+		_barrier_t -= delta
+		if _barrier_t <= 0.0:
+			barrier = 0
+			_show_bubble(false)
 	for k in skill_cd:
 		skill_cd[k] = maxf(0.0, skill_cd[k] - delta)
 	_regen(delta)
@@ -106,7 +116,7 @@ func _process(delta: float) -> void:
 	if can_move and state != "dead":
 		input = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var dir := Vector3(input.x, 0, input.y)
-	var spd := SPEED * (1.0 + 0.12 * Game.perk("swift"))
+	var spd := SPEED * float(Rpg.d("move"))
 	match state:
 		"normal":
 			var target := dir * spd
@@ -205,7 +215,7 @@ func attack() -> void:
 
 
 func _swing_time() -> float:
-	return 0.44 if _combo == 2 else 0.3
+	return (0.44 if _combo == 2 else 0.3) / float(Rpg.d("aspd"))
 
 
 func _start_swing() -> void:
@@ -228,12 +238,15 @@ func _start_swing() -> void:
 
 func _do_hit() -> void:
 	var reach := 2.2 + (0.5 if _combo == 2 else 0.0)
-	var power := 1.8 if _combo == 2 else 1.0
+	var power := (1.8 + 0.35 * Game.perk("combo_master")) if _combo == 2 else 1.0
 	var base := float(Game.state["atk"]) * power * (1.0 + 0.2 * Game.perk("sparkle_edge"))
 	var fwd := facing()
 	_slash_fx(fwd, _combo == 2)
 	if Game.combat == null:
 		return
+	if _combo == 2 and Game.perk("combo_master") > 0:
+		Game.combat.hazard("ring", global_position, {"delay": 0.02, "active": 0.5, "damage": int(base * 0.6), "friendly": true,
+			"element": "arcane", "ring_speed": 12.0, "ring_max": 4.5, "color": Color(1.0, 0.7, 0.95)})
 	var hits := 0
 	var crit_hit := false
 	for e in Game.combat.enemies.duplicate():
@@ -246,13 +259,13 @@ func _do_hit() -> void:
 		if rel.length() > 0.8 and fwd.dot(rel.normalized()) < 0.2:
 			continue
 		var dmg := base * randf_range(0.9, 1.1)
-		if randf() < 0.12 * Game.perk("crit"):
+		if randf() < float(Rpg.d("crit")):
 			dmg *= 2.0
 			crit_hit = true
 		e.take_damage(int(round(dmg)), "arcane", rel, "")
 		hits += 1
 	if hits > 0:
-		Game.heal(0, 1 + Game.perk("mana_bloom"))
+		Game.heal(0, int(Rpg.d("mp_hit")))
 		if _combo == 2 or crit_hit:
 			Game.combat.main.hitstop(0.06)
 			Game.combat.main.shake(0.18)
@@ -296,65 +309,52 @@ func dash() -> void:
 	_st = 0.0
 	model.action("Dodge_Forward", 2.6)
 	invuln = maxf(invuln, 0.34)
-	_dash_cd = 0.75 * (1.0 - 0.35 * Game.perk("quick_step"))
+	_dash_cd = 0.75 * float(Rpg.d("dash"))
 	Audio.sfx("swing", 0.1, 1.0)
 
 
 func cast(slot: int) -> void:
 	if state == "dead" or state == "dash" or state == "hurt":
 		return
-	var sid: String = Game.SKILL_ORDER[slot]
-	var sk: Dictionary = Game.SKILLS[sid]
-	if not Game.state["spells"].has(sid):
-		_warn("You haven't learned that spell yet!")
+	var sid := Rpg.slot_skill(slot)
+	if sid == "":
+		_warn("No skill in this slot. Set one up in Menu > Skills.")
 		return
 	if skill_cd.get(sid, 0.0) > 0.0:
 		Audio.sfx("ui_cancel", 0.0, -8.0)
 		return
-	if Game.state["mp"] < int(sk["mp"]):
+	if Game.state["mp"] < Rpg.skill_mp(sid):
 		_warn("Not enough MP! Wand hits restore MP.")
 		return
-	Game.heal(0, -int(sk["mp"]))
-	skill_cd[sid] = float(sk["cd"])
+	Game.heal(0, -Rpg.skill_mp(sid))
+	skill_cd[sid] = Rpg.skill_cd(sid)
 	state = "cast"
 	_st = 0.0
-	var atk := float(Game.state["atk"])
+	var r := Rpg.rank(sid)
+	var el: String = Rpg.ACTIVES[sid]["element"]
+	var sp := float(Rpg.d("matk")) * Rpg.element_mult(el)
 	var w := get_parent()
-	model.action({"heal": "Spellcast_Raise", "starfall": "Spellcast_Long"}.get(sid, "Spellcast_Shoot"), 2.0)
-	var arm: Node3D = model.find_child("ArmR", true, false)
-	if arm:
-		var tw := create_tween()
-		tw.tween_property(arm, "rotation:x", -2.6, 0.08)
-		tw.tween_interval(0.15)
-		tw.tween_property(arm, "rotation:x", 0.0, 0.15)
+	model.action({"heal": "Spellcast_Raise", "starfall": "Spellcast_Long", "shield": "Spellcast_Raise", "blink": "Dodge_Forward"}.get(sid, "Spellcast_Shoot"), 2.0)
 	match sid:
 		"flame":
 			_aim_assist(12.0)
 			Audio.sfx("fire")
 			var fwd := facing()
-			for i in 3:
-				var d := fwd.rotated(Vector3.UP, (i - 1) * 0.22)
-				Game.combat.projectile(global_position + d * 0.6, d * 14.0, int(atk * 1.3 * (1.0 + 0.3 * Game.perk("fire_heart"))),
+			var n := 3 + int((r - 1) / 2)
+			for i in n:
+				var d := fwd.rotated(Vector3.UP, (i - (n - 1) / 2.0) * 0.2)
+				Game.combat.projectile(global_position + d * 0.6, d * 14.0, int(sp * (1.0 + 0.25 * (r - 1))),
 					true, Color("ff8a4c"), "fire", "burn", 0.5, 1.2)
 		"frost":
 			Audio.sfx("ice")
-			var r := 3.4 * (1.0 + 0.25 * Game.perk("frost_touch"))
-			Game.combat.hazard("circle", global_position, {"radius": r, "delay": 0.05, "damage": int(atk * 1.1),
+			var rad := (3.2 + 0.3 * (r - 1)) * (1.0 + 0.25 * Game.perk("frost_touch"))
+			Game.combat.hazard("circle", global_position, {"radius": rad, "delay": 0.05, "damage": int(sp * (0.9 + 0.2 * (r - 1))),
 				"friendly": true, "element": "ice", "status": "freeze", "color": Color(0.6, 0.85, 1.0)})
-			var ring := MeshInstance3D.new()
-			ring.mesh = Art.torus(0.9, 1.0)
-			ring.material_override = Art.mat(Color(0.75, 0.92, 1.0, 0.7), 2.0)
-			ring.position = global_position + Vector3(0, 0.2, 0)
-			ring.scale = Vector3(0.3, 0.2, 0.3)
-			w.add_child(ring)
-			var tw := ring.create_tween()
-			tw.tween_property(ring, "scale", Vector3(r, 0.2, r), 0.25)
-			tw.tween_property(ring, "scale", Vector3(r * 1.05, 0.01, r * 1.05), 0.2)
-			tw.tween_callback(ring.queue_free)
-			Art.burst(w, global_position + Vector3(0, 0.5, 0), Color("bfe8ff"), 30, "sparkle", r * 2.0, 0.6, 0.35, Vector3.ZERO)
+			_ring_fx(rad, Color(0.75, 0.92, 1.0, 0.7))
+			Art.burst(w, global_position + Vector3(0, 0.5, 0), Color("bfe8ff"), 30, "sparkle", rad * 2.0, 0.6, 0.35, Vector3.ZERO)
 		"heal":
 			Audio.sfx("heal")
-			var amt := int(Game.state["max_hp"] * 0.35) + 10
+			var amt := int(Game.state["max_hp"] * (0.3 + 0.06 * (r - 1))) + int(sp * 0.5)
 			Game.heal(amt)
 			Art.float_text(w, global_position + Vector3(0, 2, 0), "+%d" % amt, Color("9fffb8"), 80)
 			Art.burst(w, global_position + Vector3(0, 0.3, 0), Color("9fffb8"), 26, "heart", 2.5, 1.2, 0.3, Vector3(0, 2, 0))
@@ -365,15 +365,122 @@ func cast(slot: int) -> void:
 			for e in Game.combat.enemies:
 				if is_instance_valid(e) and not e.dead and (e.global_position - global_position).length() < 11.0:
 					targets.append(e.global_position)
-			for i in 4:
+			for i in 4 + 2 * (r - 1):
 				targets.append(global_position + Vector3(randf_range(-6, 6), 0, randf_range(-6, 6)))
-			for pos in targets.slice(0, 12):
-				Game.combat.hazard("circle", pos, {"radius": 1.5, "delay": 0.45, "damage": int(atk * 2.2), "friendly": true,
+			for pos in targets.slice(0, 10 + 2 * r):
+				Game.combat.hazard("circle", pos, {"radius": 1.5, "delay": 0.45, "damage": int(sp * (1.8 + 0.3 * (r - 1))), "friendly": true,
 					"element": "arcane", "status": "stun", "color": Color(1.0, 0.9, 0.4)})
 				var star := Art.part(w, Art.sphere(0.35), Color("fff3b0"), pos + Vector3(0, 8, 0), Vector3.ZERO, Vector3.ONE, 3.0, false)
 				var tw := star.create_tween()
 				tw.tween_property(star, "position:y", 0.3, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 				tw.tween_callback(star.queue_free)
+		"bolt":
+			_aim_assist(14.0)
+			Audio.sfx("sparkle", 0.1)
+			var fwd := facing()
+			var pr: Projectile = Game.combat.projectile(global_position + fwd * 0.7 + Vector3(0, 0.2, 0), fwd * 22.0,
+				int(sp * (1.1 + 0.25 * (r - 1))), true, Color("ffb3e6"), "arcane", "", 0.45, 1.0)
+			pr.pierce = r
+		"blink":
+			Audio.sfx("swing", 0.1, 2.0)
+			var fwd := facing()
+			var from := global_position
+			var to := from + fwd * 5.0
+			if Game.combat.arena_active:
+				to = Game.combat.clamp_to_arena(to)
+			var q := PhysicsRayQueryParameters3D.create(from + Vector3(0, 0.6, 0), to + Vector3(0, 0.6, 0))
+			q.exclude = [get_rid()]
+			var hit := get_world_3d().direct_space_state.intersect_ray(q)
+			if not hit.is_empty():
+				to = (hit["position"] as Vector3) - fwd * 0.5
+				to.y = 0.0
+			invuln = maxf(invuln, 0.45)
+			Art.burst(w, from + Vector3(0, 0.8, 0), Color("fff3b0"), 20, "sparkle", 2.5, 0.5, 0.35, Vector3.ZERO)
+			global_position = to
+			Game.combat.hazard("circle", to, {"radius": 2.4, "delay": 0.05, "damage": int(sp * (1.0 + 0.4 * (r - 1))), "friendly": true,
+				"element": "arcane", "color": Color(1.0, 0.95, 0.6)})
+			_ring_fx(2.4, Color(1.0, 0.95, 0.6, 0.7))
+		"thunder":
+			Audio.sfx("starfall", 0.1, -2.0)
+			var hit_list: Array = []
+			var cur := global_position
+			for i in 3 + r:
+				var best: Enemy = null
+				var bd := 9.0
+				for e in Game.combat.enemies:
+					if not is_instance_valid(e) or e.dead or hit_list.has(e):
+						continue
+					var dd := cur.distance_to(e.global_position)
+					if dd < bd:
+						bd = dd
+						best = e
+				if best == null:
+					break
+				_zap(cur + Vector3(0, 1.0, 0), best.global_position + Vector3(0, 0.8, 0))
+				best.take_damage(int(sp * (1.2 + 0.25 * (r - 1)) * pow(0.9, i)), "arcane", best.global_position - cur, "stun")
+				hit_list.append(best)
+				cur = best.global_position
+			if hit_list.is_empty():
+				_zap(global_position + Vector3(0, 1.0, 0), global_position + facing() * 4.0 + Vector3(0, 0.3, 0))
+			Game.combat.main.shake(0.2)
+		"shield":
+			Audio.sfx("buff")
+			barrier = int(Game.state["max_hp"] * (0.25 + 0.1 * (r - 1)))
+			_barrier_t = 6.0
+			_show_bubble(true)
+			Art.float_text(w, global_position + Vector3(0, 2, 0), "Shield %d" % barrier, Color("aee0ff"), 72)
+
+
+func _ring_fx(r: float, c: Color) -> void:
+	var ring := MeshInstance3D.new()
+	ring.mesh = Art.torus(0.9, 1.0)
+	ring.material_override = Art.mat(c, 2.0)
+	ring.position = global_position + Vector3(0, 0.2, 0)
+	ring.scale = Vector3(0.3, 0.2, 0.3)
+	get_parent().add_child(ring)
+	var tw := ring.create_tween()
+	tw.tween_property(ring, "scale", Vector3(r, 0.2, r), 0.25)
+	tw.tween_property(ring, "scale", Vector3(r * 1.05, 0.01, r * 1.05), 0.2)
+	tw.tween_callback(ring.queue_free)
+
+
+## A zig-zag lightning bolt between two points.
+func _zap(a: Vector3, b: Vector3) -> void:
+	var w := get_parent()
+	var pts: Array = [a]
+	for i in range(1, 6):
+		var t := i / 6.0
+		pts.append(a.lerp(b, t) + Vector3(randf_range(-0.35, 0.35), randf_range(-0.25, 0.25), randf_range(-0.35, 0.35)))
+	pts.append(b)
+	for i in pts.size() - 1:
+		var p0: Vector3 = pts[i]
+		var p1: Vector3 = pts[i + 1]
+		var seg := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.09, 0.09, p0.distance_to(p1))
+		seg.mesh = bm
+		seg.material_override = Art.mat(Color("fff6a8"), 4.0)
+		w.add_child(seg)
+		seg.global_position = (p0 + p1) / 2.0
+		seg.look_at(p1, Vector3.UP if absf((p1 - p0).normalized().y) < 0.95 else Vector3.RIGHT)
+		var tw := seg.create_tween()
+		tw.tween_interval(0.12)
+		tw.tween_property(seg, "scale", Vector3(0.1, 0.1, 1), 0.1)
+		tw.tween_callback(seg.queue_free)
+	Art.burst(w, b, Color("fff6a8"), 10, "sparkle", 2.5, 0.35, 0.3, Vector3.ZERO)
+
+
+func _show_bubble(on: bool) -> void:
+	if on and _bubble == null:
+		_bubble = MeshInstance3D.new()
+		_bubble.mesh = Art.sphere(1.0)
+		_bubble.material_override = Art.mat(Color(0.7, 0.88, 1.0, 0.28), 0.8, 0.9)
+		_bubble.position.y = 0.8
+		_bubble.scale = Vector3(0.9, 1.0, 0.9)
+		add_child(_bubble)
+	elif not on and _bubble:
+		_bubble.queue_free()
+		_bubble = null
 
 
 func use_item(id: String) -> void:
@@ -408,6 +515,18 @@ func _warn(text: String) -> void:
 func hurt(dmg: int, from: Vector3) -> bool:
 	if invuln > 0.0 or state == "dead" or not can_move:
 		return false
+	dmg = Rpg.mitigate(dmg)
+	if barrier > 0:
+		var soak := mini(barrier, dmg)
+		barrier -= soak
+		dmg -= soak
+		Art.float_text(get_parent(), global_position + Vector3(-0.3, 2.1, 0), "(%d)" % soak, Color("aee0ff"), 56)
+		if barrier <= 0:
+			_show_bubble(false)
+		if dmg <= 0:
+			invuln = 0.4
+			Audio.sfx("ice", 0.1, -6.0)
+			return true
 	Game.heal(-dmg)
 	invuln = 0.8
 	_hurt_t = 0.0

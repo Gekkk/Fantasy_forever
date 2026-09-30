@@ -28,9 +28,8 @@ func _ready() -> void:
 	_dash_cd = _overlay(_dash)
 	var spots := [Vector2(-120, -320), Vector2(-240, -285), Vector2(-315, -185), Vector2(-420, -80)]
 	for i in 4:
-		var sid: String = Game.SKILL_ORDER[i]
 		var b := _round_button("", Color("ffd36b"), 92, spots[i])
-		b.icon = Art.tex(Game.SKILLS[sid]["icon"])
+		b.icon = Art.tex("unknown")
 		b.expand_icon = true
 		b.add_theme_constant_override("icon_max_width", 52)
 		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -78,16 +77,19 @@ func _overlay(b: Button) -> ColorRect:
 func update_cooldowns(p: Player) -> void:
 	if not visible or not joystick_enabled:
 		return
-	_dash_cd.anchor_top = 1.0 - clampf(p.dash_ready() / 0.75, 0.0, 1.0)
+	_dash_cd.anchor_top = 1.0 - clampf(p.dash_ready() / (0.75 * float(Rpg.d("dash"))), 0.0, 1.0)
 	for i in _skills.size():
-		var sid: String = Game.SKILL_ORDER[i]
+		var sid := Rpg.slot_skill(i)
 		var b: Button = _skills[i][0]
 		var ov: ColorRect = _skills[i][1]
-		var learned: bool = Game.state["spells"].has(sid)
+		var learned := sid != ""
 		b.visible = learned
 		if learned:
-			ov.anchor_top = 1.0 - clampf(float(p.skill_cd.get(sid, 0.0)) / float(Game.SKILLS[sid]["cd"]), 0.0, 1.0)
-			b.modulate = Color.WHITE if Game.state["mp"] >= int(Game.SKILLS[sid]["mp"]) else Color(0.7, 0.7, 1.0, 0.7)
+			var want: Texture2D = Art.tex(Rpg.ACTIVES[sid]["icon"])
+			if b.icon != want:
+				b.icon = want
+			ov.anchor_top = 1.0 - clampf(float(p.skill_cd.get(sid, 0.0)) / Rpg.skill_cd(sid), 0.0, 1.0)
+			b.modulate = Color.WHITE if Game.state["mp"] >= Rpg.skill_mp(sid) else Color(0.7, 0.7, 1.0, 0.7)
 
 
 func _send(action: String) -> void:
@@ -149,7 +151,7 @@ func set_joystick(v: bool) -> void:
 	joystick_enabled = v
 	_dash.visible = v
 	for sk in _skills:
-		sk[0].visible = v and Game.state.get("spells", []).has(Game.SKILL_ORDER[_skills.find(sk)])
+		sk[0].visible = v and Rpg.slot_skill(_skills.find(sk)) != ""
 	if not v:
 		_release()
 	queue_redraw()

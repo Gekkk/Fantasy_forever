@@ -2,14 +2,15 @@ extends Node
 ## Automated play-through used for testing (run with `-- --autotest`).
 ## A little bot plays the real-time combat through the real input actions:
 ## it walks up to critters, chains wand combos, casts skills, dashes out of
-## red telegraphs, drinks potions, and picks perks. It plays the whole main
+## red telegraphs, drinks potions, spends attribute/skill points and wears the best
+## gear it finds. It plays the whole main
 ## quest (arenas, elite gremlins, both bosses), a side quest, a defeat, and
 ## the ending, saving screenshots along the way.
 
 var main
 var shots_dir := "user://shots"
 var failures: Array = []
-var stats := {"attacks": 0, "casts": 0, "dashes": 0, "items": 0, "perks": 0, "downs": 0}
+var stats := {"attacks": 0, "casts": 0, "dashes": 0, "items": 0, "downs": 0}
 var _shot_flags := {}
 
 
@@ -66,13 +67,11 @@ func q() -> int:
 	return int(Game.state["quest"])
 
 
-## Clicks through dialogs and perk cards until control returns.
+## Clicks through dialogs until control returns.
 func drain_dialogs(max_sec := 30.0) -> void:
 	var t := 0.0
 	while t < max_sec:
-		if main._perk_showing:
-			await _pick_perk()
-		elif main.ui.is_dialog_open():
+		if main.ui.is_dialog_open():
 			await press("confirm")
 			await _wait(0.05)
 			t += 0.05
@@ -92,14 +91,6 @@ func wait_mode(m: int, max_sec := 20.0) -> bool:
 		await _wait(0.1)
 		t += 0.1
 	return main.mode == m
-
-
-func _pick_perk() -> void:
-	await shot_once("perk_choice")
-	await _wait(0.3)
-	await press("confirm")
-	stats["perks"] += 1
-	await _wait(0.2)
 
 
 func release_moves() -> void:
@@ -177,8 +168,56 @@ func _nearest(p: Vector3, prefer: Callable) -> Enemy:
 
 
 func _ready_skill(sid: String) -> bool:
-	return Game.state["spells"].has(sid) and float(main.player.skill_cd.get(sid, 0.0)) <= 0.0 \
-		and int(Game.state["mp"]) >= int(Game.SKILLS[sid]["mp"])
+	return Game.state["slots"].has(sid) and float(main.player.skill_cd.get(sid, 0.0)) <= 0.0 \
+		and int(Game.state["mp"]) >= Rpg.skill_mp(sid)
+
+
+func _cast(sid: String) -> void:
+	stats["casts"] += 1
+	stats["cast_" + sid] = int(stats.get("cast_" + sid, 0)) + 1
+	await press("skill%d" % (Game.state["slots"].find(sid) + 1))
+
+
+## Levels up like a player would: spend points, slot the best spells, wear the best gear.
+func _spend_points() -> void:
+	var s := Game.state
+	var order := ["int", "vit", "int", "str", "vit", "agi", "luk"]
+	var i := 0
+	while int(s["attr_points"]) > 0:
+		Rpg.spend_attr(order[i % order.size()])
+		i += 1
+	var wish := ["bolt", "heal", "thunder", "shield", "starfall", "iron_skin", "big_heart", "sparkle_edge", "combo_master",
+		"frost", "flame", "crit", "mana_bloom", "quick_step", "blink", "swift", "deep_pockets", "fire_heart", "frost_touch",
+		"lucky_star", "cozy_regen", "mochi_power", "star_trail"]
+	var progress := true
+	while int(s["skill_points"]) > 0 and progress:
+		progress = false
+		for id in wish:
+			if Rpg.raise(id):
+				stats["skill_ups"] = int(stats.get("skill_ups", 0)) + 1
+				progress = true
+				break
+	var slot_pref := ["heal", "bolt", "thunder", "starfall", "shield", "frost", "flame"]
+	var k := 0
+	for sid in slot_pref:
+		if k < 4 and Rpg.rank(sid) > 0:
+			Rpg.set_slot(k, sid)
+			k += 1
+	var equipped := 0
+	for slot in Rpg.SLOTS:
+		var best := -1
+		var best_score := Rpg.score(s["equip"][slot])
+		var bag: Array = s["bag"]
+		for j in bag.size():
+			if bag[j]["slot"] == slot and Rpg.score(bag[j]) > best_score:
+				best = j
+				best_score = Rpg.score(bag[j])
+		if best >= 0:
+			Rpg.equip_from_bag(best)
+			equipped += 1
+	if equipped > 0:
+		stats["equips"] = int(stats.get("equips", 0)) + equipped
+		main.player.rebuild_model()
 
 
 ## One decision of the bot. Uses the same actions a player would press.
@@ -188,10 +227,12 @@ func _bot_tick(prefer: Callable) -> void:
 	var pos := p.global_position
 	var hp_ratio := float(s["hp"]) / float(s["max_hp"])
 	# 1) Survive.
+	if hp_ratio < 0.65 and p.barrier <= 0 and _ready_skill("shield"):
+		await _cast("shield")
+		return
 	if hp_ratio < 0.4:
 		if _ready_skill("heal"):
-			stats["casts"] += 1
-			await press("skill3")
+			await _cast("heal")
 			return
 		if hp_ratio < 0.3 and Game.item_count("muffin") > 0:
 			stats["items"] += 1
@@ -230,19 +271,24 @@ func _bot_tick(prefer: Callable) -> void:
 	for o in _live_enemies():
 		if pos.distance_to(o.global_position) < 6.0:
 			near += 1
+	if near >= 2 and _ready_skill("thunder"):
+		await _cast("thunder")
+		return
 	if near >= 2 and _ready_skill("starfall"):
-		stats["casts"] += 1
-		await press("skill4")
+		await _cast("starfall")
 		return
 	if dist < 3.0 and _ready_skill("frost") and (e.weak == "ice" or near >= 2 or randf() < 0.3):
-		stats["casts"] += 1
-		await press("skill2")
+		await _cast("frost")
 		return
 	if dist < 7.0 and _ready_skill("flame") and (e.weak == "fire" or randf() < 0.25):
 		p.face(to)
 		steer(to)
-		stats["casts"] += 1
-		await press("skill1")
+		await _cast("flame")
+		return
+	if dist > 2.5 and dist < 11.0 and _ready_skill("bolt") and randf() < 0.6:
+		p.face(to)
+		steer(to)
+		await _cast("bolt")
 		return
 	var reach := 1.5 + e.hit_radius
 	if dist > reach:
@@ -263,10 +309,8 @@ func fight_bot(done: Callable, max_sec: float, label: String, prefer := Callable
 		if done.call():
 			release_moves()
 			return true
-		if main._perk_showing:
-			release_moves()
-			await _pick_perk()
-			continue
+		if int(Game.state["attr_points"]) + int(Game.state["skill_points"]) > 0:
+			_spend_points()
 		if main.ui.is_dialog_open():
 			release_moves()
 			await press("confirm")
@@ -444,6 +488,39 @@ func _run() -> void:
 		await drain_dialogs(8.0)
 	check(Game.state["spells"].has("starfall"), "learned starfall")
 
+	# Shopping at Madame Velour's boutique on North Avenue.
+	Game.add_coins(400)
+	await main.load_map("city", door("boutique") + Vector3(0, 0, 1.4))
+	await drain_dialogs()
+	await interact("boutique")
+	check(main.world.map_id == "boutique_in", "entered the boutique")
+	await teleport(Vector3(-0.8, 0, -1.9))
+	var bag_before: int = Game.state["bag"].size()
+	var coins_before: int = Game.state["coins"]
+	main.interact("velour")
+	var picks := 0
+	var t_shop := 0.0
+	while t_shop < 30.0 and (main.mode != main.Mode.EXPLORE or main.ui.is_dialog_open()):
+		if main.ui.is_dialog_open():
+			if main.ui._typing:
+				main.ui._finish_typing()
+			elif not main.ui._options.is_empty() and picks < 2:
+				if picks == 0:
+					await shot("11a_shop")
+				main.ui._choose(0) # the first item, then "Buy it!"
+				picks += 1
+			else:
+				await press("confirm")
+		await _wait(0.1)
+		t_shop += 0.1
+	check(Game.state["bag"].size() == bag_before + 1, "bought an item at the boutique")
+	check(int(Game.state["coins"]) < coins_before, "paid for it")
+	_spend_points()
+	await drain_dialogs()
+	await teleport(Vector3(0, 0, 3.9))
+	await _wait(1.2)
+	await drain_dialogs()
+
 	# Chapter 5: the Printer King.
 	Game.full_heal()
 	await boss_fight(func():
@@ -457,7 +534,7 @@ func _run() -> void:
 
 	# A defeat on purpose: you must wake up at home, healed, able to move.
 	# Leash the attacker to wherever we are standing so it can always reach us.
-	# (Removed quietly: cheering them up would give XP and could pop the perk picker.)
+	# (Removed quietly: cheering them up would give XP and loot.)
 	for old in _live_enemies():
 		main.combat.enemies.erase(old)
 		old.queue_free()
@@ -467,9 +544,6 @@ func _run() -> void:
 	var t0 := Time.get_ticks_msec()
 	while main.world.map_id != "home_in" and Time.get_ticks_msec() - t0 < 30000:
 		Game.state["hp"] = mini(int(Game.state["hp"]), 1)
-		if main._perk_showing:
-			await _pick_perk()
-			continue
 		var v := _nearest(main.player.position, Callable())
 		if v == null and main.mode == main.Mode.EXPLORE:
 			# Mochi may have cheered the last one up: bring in another.
@@ -530,12 +604,24 @@ func _run() -> void:
 	main.open_menu()
 	await _wait(0.5)
 	await shot("11_menu_quests")
+	main.menu._hero()
+	await _wait(0.3)
+	await shot("11b_menu_hero")
+	main.menu._gear()
+	await _wait(0.3)
+	await shot("11c_menu_gear")
 	main.menu._magic()
 	await _wait(0.3)
 	await shot("12_menu_skills")
 	main.close_menu()
 
-	print("STATS ", stats, " level ", Game.state["level"], " perks ", Game.state["perks"])
+	var worn := []
+	for slot in Rpg.SLOTS:
+		var it: Dictionary = Game.state["equip"][slot]
+		if not it.is_empty():
+			worn.append("%s [%s]" % [it["name"], Rpg.RARITY[int(it["rarity"])]["name"]])
+	print("STATS ", stats, " level ", Game.state["level"], " attr ", Game.state["attr"], " skills ", Game.state["skills"])
+	print("GEAR ", worn, " bag ", Game.state["bag"].size(), " hp ", Game.state["max_hp"], " atk ", Game.state["atk"], " matk ", Rpg.d("matk"), " def ", Rpg.d("def"))
 	if failures.is_empty():
 		print("AUTOTEST PASS")
 	else:

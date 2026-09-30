@@ -5,11 +5,11 @@ extends Node3D
 
 const BEHAVIOR := {
 	# preferred distance, attack range, windup seconds, recover seconds
-	"melee": [1.2, 1.9, 0.55, 0.7],
-	"charger": [4.5, 6.5, 0.75, 0.9],
-	"shooter": [6.0, 9.5, 0.6, 0.9],
-	"bomber": [5.0, 8.5, 0.2, 1.2],
-	"spinner": [1.4, 2.3, 0.8, 0.9],
+	"melee": [1.2, 1.9, 0.48, 0.5],
+	"charger": [4.5, 6.5, 0.65, 0.6],
+	"shooter": [6.0, 9.5, 0.5, 0.6],
+	"bomber": [5.0, 8.5, 0.2, 0.8],
+	"spinner": [1.4, 2.3, 0.7, 0.6],
 	"boss": [3.0, 8.0, 0.6, 0.8],
 }
 
@@ -49,31 +49,43 @@ var _bar_show := 0.0
 var _ice: MeshInstance3D
 var _alert: Label3D
 var _weak_shown := 0.0
+var affix := "" # elites: swift | armored | blazing
+var _alt := false
+var _dashes_left := 0
+var _trail_cd := 0.0
 
 
 func _ready() -> void:
 	data = Game.ENEMIES[id]
 	behavior = String(data["behavior"])
 	var lvl := int(Game.state.get("level", 1))
-	var scale_hp := 1.0 + 0.12 * (lvl - 1)
-	var scale_dmg := 1.0 + 0.07 * (lvl - 1)
+	# Critters grow with you, so gear and attributes matter.
+	var scale_hp := 2.2 * (1.0 + 0.2 * (lvl - 1))
+	var scale_dmg := 1.5 * (1.0 + 0.11 * (lvl - 1))
 	if behavior == "boss":
-		scale_hp = 1.0
-		scale_dmg = 1.0
-	max_hp = int(float(data["hp"]) * scale_hp * (1.7 if elite else 1.0))
+		# Bosses keep pace with a geared-up hero.
+		scale_hp = 1.0 + 0.16 * (lvl - 1)
+		scale_dmg = 1.0 + 0.13 * (lvl - 1)
+	max_hp = int(float(data["hp"]) * scale_hp * (2.2 if elite else 1.0))
 	hp = max_hp
-	dmg = int(float(data["dmg"]) * scale_dmg * (1.2 if elite else 1.0))
+	dmg = int(float(data["dmg"]) * scale_dmg * (1.3 if elite else 1.0))
 	speed = float(data["speed"])
+	if elite and affix == "":
+		affix = ["swift", "armored", "blazing"].pick_random()
+	if affix == "swift":
+		speed *= 1.45
 	weak = String(data["weak"])
 	model = Models.tiny_clock() if id == "tick" else Models.critter(id)
 	add_child(model)
+	Art.outline(model, 0.022)
 	model.scale = Vector3.ONE * (1.15 if elite else 0.95)
 	hit_radius = 0.55 * model.scale.x
 	_make_bar()
 	_alert = Art.label3d(self, "!", Vector3(0, model.height * model.scale.y + 0.9, 0), 96, Color("ffd36b"))
 	_alert.visible = false
 	if elite:
-		Art.ambient(self, Vector3(0, 0.7, 0), Vector3(0.5, 0.6, 0.5), Color("ffd36b"), 14, "sparkle", 0.25, 1.4)
+		var aura: Color = {"swift": Color("9fffd0"), "armored": Color("9fc8ff"), "blazing": Color("ff9f5a")}.get(affix, Color("ffd36b"))
+		Art.ambient(self, Vector3(0, 0.7, 0), Vector3(0.5, 0.6, 0.5), aura, 16, "sparkle", 0.25, 1.4)
 	_pick_target()
 
 
@@ -120,7 +132,9 @@ func _can_act() -> bool:
 
 
 func display_name() -> String:
-	return ("Elite " if elite else "") + String(data["name"])
+	if not elite:
+		return String(data["name"])
+	return "%s %s" % [affix.capitalize() if affix != "" else "Elite", data["name"]]
 
 
 # ================================================================= update
@@ -155,6 +169,12 @@ func _process(delta: float) -> void:
 		state = "wander"
 	_st += delta
 	_atk_cd -= delta
+	if affix == "blazing" and aggro:
+		_trail_cd -= delta
+		if _trail_cd <= 0.0:
+			_trail_cd = 1.1
+			Game.combat.hazard("circle", global_position, {"radius": 0.9, "delay": 0.3, "active": 2.2, "damage": int(dmg * 0.5),
+				"color": Color(1.0, 0.55, 0.25)})
 	_think(delta, p, to_p, dist)
 	_clamp_position()
 
@@ -232,7 +252,7 @@ func _think(delta: float, p: Player, to_p: Vector3, dist: float) -> void:
 			model.moving = false
 			_face(to_p if behavior != "charger" else _aim, delta)
 			model.position.x = sin(_st * 60.0) * 0.04
-			if _st >= float(cfg[2]):
+			if _st >= float(cfg[2]) * (0.7 if affix == "swift" else 1.0):
 				model.position.x = 0.0
 				_execute(p, to_p)
 		"dash":
@@ -242,12 +262,21 @@ func _think(delta: float, p: Player, to_p: Vector3, dist: float) -> void:
 			rel.y = 0
 			if rel.length() < 1.0 + hit_radius:
 				p.hurt(dmg, global_position)
-			if _st >= 0.42:
-				state = "recover"
-				_st = 0.0
+			if _st >= (0.25 if _alt and behavior == "melee" else 0.42):
+				if _dashes_left > 0:
+					_dashes_left -= 1
+					var again := p.global_position - global_position
+					again.y = 0
+					_aim = again.normalized()
+					_tele = Game.combat.hazard("line", global_position, {"dir": _aim, "length": 7.0, "width": 1.3, "delay": 0.35, "damage": 0})
+					state = "windup"
+					_st = float(BEHAVIOR[behavior][2]) - 0.35
+				else:
+					state = "recover"
+				_st = 0.0 if state == "recover" else _st
 		"recover":
 			model.moving = false
-			if _st >= float(cfg[3]):
+			if _st >= float(cfg[3]) * (0.6 if affix == "swift" else 1.0):
 				state = "chase"
 				_st = 0.0
 
@@ -258,6 +287,27 @@ func _begin_windup(p: Player, to_p: Vector3) -> void:
 	_aim = to_p.normalized()
 	var c: Combat = Game.combat
 	var base := global_position
+	_alt = randf() < 0.35
+	if _alt:
+		match behavior:
+			"melee":
+				_tele = c.hazard("line", base, {"dir": _aim, "length": 4.5, "width": 1.2, "delay": 0.6, "damage": 0})
+				return
+			"shooter":
+				_tele = c.hazard("circle", base, {"radius": 1.2, "delay": 0.7, "damage": 0, "color": Color(1.0, 0.6, 0.3)})
+				return
+			"bomber":
+				for i in 3:
+					var off := Vector3(randf_range(-2.5, 2.5), 0, randf_range(-2.5, 2.5)) if i > 0 else Vector3.ZERO
+					var h := c.hazard("circle", p.global_position + off, {"radius": 1.4, "delay": 1.0 + i * 0.15, "damage": dmg,
+						"color": Color(0.5, 0.6, 1.0) if id == "cloud" else Color(0.7, 0.45, 0.3)})
+					h.fired.connect(_bomb_fx.bind(p.global_position + off))
+				return
+			"spinner":
+				_tele = c.hazard("circle", base, {"radius": 1.0, "delay": 0.8, "damage": 0})
+				return
+			"charger":
+				_dashes_left = 1
 	match behavior:
 		"melee":
 			_tele = c.hazard("circle", base + _aim * 1.0, {"radius": 1.25, "delay": 0.55, "damage": dmg})
@@ -288,7 +338,26 @@ func _execute(p: Player, to_p: Vector3) -> void:
 	var cfg: Array = BEHAVIOR[behavior]
 	state = "recover"
 	_st = 0.0
-	_atk_cd = randf_range(1.4, 2.4)
+	_atk_cd = randf_range(0.8, 1.5) * (0.7 if affix == "swift" else 1.0)
+	if _alt:
+		match behavior:
+			"melee":
+				state = "dash"
+				Audio.sfx("swing", 0.1)
+				return
+			"shooter":
+				for i in 8:
+					var d := Vector3(sin(i * TAU / 8), 0, cos(i * TAU / 8))
+					Game.combat.projectile(global_position + d * 0.6, d * 7.0, dmg, false, Color("fff4e0") if id != "email" else Color("c9b6ff"))
+				Audio.sfx("swing", 0.2, -2.0)
+				return
+			"bomber":
+				return
+			"spinner":
+				Game.combat.hazard("ring", global_position, {"delay": 0.02, "active": 1.2, "damage": dmg, "ring_speed": 5.0, "ring_max": 6.0,
+					"color": Color(0.7, 1.0, 0.8)})
+				Audio.sfx("swing", 0.1, -2.0)
+				return
 	match behavior:
 		"melee":
 			var tw := create_tween()
@@ -329,6 +398,8 @@ func take_damage(amount: int, element := "none", from_dir := Vector3.ZERO, statu
 		Game.state["known_weak"][_weak_key()] = true
 	if _stun > 0.0:
 		mult *= 1.25
+	if affix == "armored" and hp > max_hp / 2:
+		mult *= 0.6
 	var amt := maxi(1, int(round(amount * mult)))
 	hp -= amt
 	_bar_show = 3.0
@@ -438,7 +509,9 @@ func _die() -> void:
 	Audio.sfx("calm", 0.1)
 	Art.burst(w, global_position + Vector3(0, 1.0, 0), Color("ff8fc8"), 18, "heart", 3.0, 1.2, 0.4, Vector3(0, 1.0, 0))
 	Art.float_text(w, global_position + Vector3(0, model.height + 0.6, 0), "Cheered up!", Color("ffc2e0"), 56, 1.0, 1.2)
-	Game.combat.drop_loot(global_position, int(data["xp"]) * (2 if elite else 1), int(data["coins"]) * (2 if elite else 1))
+	var tier := 2 if behavior == "boss" else (1 if elite else 0)
+	var xp_mult := 1.0 if tier == 2 else (4.0 if elite else 1.7)
+	Game.combat.drop_loot(global_position, int(float(data["xp"]) * xp_mult), int(data["coins"]) * (3 if elite else 1), tier)
 	Game.combat.on_calmed(self)
 	var tw := create_tween()
 	tw.tween_property(model, "rotation_degrees:y", model.rotation_degrees.y + 540.0, 0.9)

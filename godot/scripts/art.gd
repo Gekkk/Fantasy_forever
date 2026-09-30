@@ -99,6 +99,20 @@ void fragment() {
 }
 """
 
+## Inverted-hull line art drawn over characters and critters (material_overlay).
+const OUTLINE := """
+shader_type spatial;
+render_mode unshaded, cull_front, depth_draw_opaque, shadows_disabled, fog_disabled;
+uniform vec4 color : source_color = vec4(0.30, 0.20, 0.40, 1.0);
+uniform float width = 0.02;
+void vertex() {
+	VERTEX += NORMAL * width;
+}
+void fragment() {
+	ALBEDO = color.rgb;
+}
+"""
+
 const TOON_ALPHA := """
 shader_type spatial;
 render_mode blend_mix, cull_disabled, depth_draw_opaque;
@@ -219,6 +233,7 @@ static func shader(code_name: String) -> Shader:
 			"toon_alpha": s.code = TOON_ALPHA + TOON_LIGHT
 			"toon_tex": s.code = TOON_TEX + TOON_LIGHT
 			"slash": s.code = SLASH
+			"outline": s.code = OUTLINE
 			"ground": s.code = GROUND + TOON_LIGHT
 			"water": s.code = WATER
 			"sky": s.code = SKY
@@ -253,6 +268,24 @@ static func slash_mesh(inner: float, outer: float, span: float) -> ArrayMesh:
 	var m := st.commit()
 	_meshes[key] = m
 	return m
+
+
+## Adds soft line art to every opaque mesh under `root`.
+static func outline(root: Node, width := 0.02, col := Color(0.30, 0.20, 0.40)) -> void:
+	var key := "outline|%.3f|%s" % [width, col.to_html()]
+	if not _mats.has(key):
+		var m := ShaderMaterial.new()
+		m.shader = shader("outline")
+		m.set_shader_parameter("width", width)
+		m.set_shader_parameter("color", col)
+		_mats[key] = m
+	for n in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		var mat := mi.material_override
+		# Skip see-through parts (wings, glows) so they stay soft.
+		if mat is ShaderMaterial and (mat as ShaderMaterial).shader == shader("toon_alpha"):
+			continue
+		mi.material_overlay = _mats[key]
 
 
 static func get_font() -> Font:
@@ -307,8 +340,8 @@ static func sphere(r: float, hemi := false) -> Mesh:
 		m.radius = r
 		m.height = r * (1.0 if hemi else 2.0)
 		m.is_hemisphere = hemi
-		m.radial_segments = 20 if r > 0.15 else 10
-		m.rings = 10 if r > 0.15 else 6
+		m.radial_segments = 32 if r > 0.4 else (24 if r > 0.15 else 12)
+		m.rings = 16 if r > 0.4 else (12 if r > 0.15 else 6)
 		_meshes[key] = m
 	return _meshes[key]
 
@@ -322,7 +355,7 @@ static func box(size: Vector3) -> Mesh:
 	return _meshes[key]
 
 
-static func cyl(top: float, bottom: float, h: float, segs := 18) -> Mesh:
+static func cyl(top: float, bottom: float, h: float, segs := 24) -> Mesh:
 	var key := "c%.3f_%.3f_%.3f_%d" % [top, bottom, h, segs]
 	if not _meshes.has(key):
 		var m := CylinderMesh.new()
@@ -341,8 +374,8 @@ static func capsule(r: float, h: float) -> Mesh:
 		var m := CapsuleMesh.new()
 		m.radius = r
 		m.height = h
-		m.radial_segments = 14
-		m.rings = 6
+		m.radial_segments = 20
+		m.rings = 8
 		_meshes[key] = m
 	return _meshes[key]
 

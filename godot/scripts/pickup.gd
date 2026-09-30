@@ -2,8 +2,9 @@ class_name Pickup
 extends Node3D
 ## XP orbs, coins and snacks that pop out of cheered-up critters and fly to you.
 
-var kind := "xp" # xp | coin | muffin | tea | heart
+var kind := "xp" # xp | coin | muffin | tea | heart | item
 var value := 1
+var item := {}
 
 var _vel := Vector3.ZERO
 var _t := 0.0
@@ -20,13 +21,22 @@ func _ready() -> void:
 			Art.part(self, Art.sphere(0.16), Color("f0a050"), Vector3(0, 0.12, 0), Vector3.ZERO, Vector3(1, 0.7, 1))
 		"tea": Art.part(self, Art.cyl(0.12, 0.12, 0.22), Color("9fd0ff"), Vector3.ZERO, Vector3.ZERO, Vector3.ONE, 0.6)
 		"heart": Art.part(self, Art.sphere(0.18), Color("ff7eb6"), Vector3.ZERO, Vector3.ZERO, Vector3.ONE, 1.5, false)
+		"item":
+			# A glowing gem in the rarity's color, with a beam you can spot from afar.
+			var c: Color = Rpg.RARITY[int(item["rarity"])]["color"]
+			Art.part(self, Art.sphere(0.2), c, Vector3.ZERO, Vector3(0, 0, 45), Vector3(0.8, 1.3, 0.8), 2.5, false)
+			var beam := Art.part(self, Art.cyl(0.06, 0.12, 2.4), Color(c, 0.35), Vector3(0, 1.2, 0), Vector3.ZERO, Vector3.ONE, 2.0, false)
+			beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			Art.ambient(self, Vector3.ZERO, Vector3(0.2, 0.2, 0.2), c, 10, "sparkle", 0.2, 1.0)
 
 
 func _process(delta: float) -> void:
 	_t += delta
 	rotation.y += delta * 4.0
 	var p: Player = Game.combat.player() if Game.combat else null
-	if _t < 0.45 or p == null:
+	# Gear waits on the ground a moment so you can see what dropped.
+	var hold := 1.1 if kind == "item" else 0.45
+	if _t < hold or p == null:
 		_vel.y -= 14.0 * delta
 		position += _vel * delta
 		if position.y < 0.3:
@@ -61,4 +71,21 @@ func _collect() -> void:
 		"heart":
 			Audio.sfx("heal", 0.1, -4.0)
 			Game.heal(value)
+		"item":
+			var r := int(item["rarity"])
+			var ui = Game.combat.main.ui
+			var slot: String = item["slot"]
+			if (Game.state["equip"][slot] as Dictionary).is_empty():
+				Game.state["equip"][slot] = item
+				Rpg.recalc()
+				ui.toast("Equipped %s!" % item["name"], slot)
+			elif Rpg.add_to_bag(item):
+				ui.toast("%s: %s (Menu > Gear)" % [Rpg.RARITY[r]["name"], item["name"]], slot)
+			else:
+				ui.toast("Your bag is full! Sell something in Menu > Gear.", "chest")
+				queue_free()
+				return
+			Audio.sfx("shard" if r >= 2 else "coin", 0.1, -2.0)
+			if r >= 2:
+				Art.burst(get_parent(), global_position, Rpg.RARITY[r]["color"], 24, "star", 3.0, 0.8, 0.35)
 	queue_free()
