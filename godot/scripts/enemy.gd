@@ -61,11 +61,11 @@ func _ready() -> void:
 	var lvl := int(Game.state.get("level", 1))
 	# Critters grow with you, so gear and attributes matter.
 	var scale_hp := 2.2 * (1.0 + 0.2 * (lvl - 1))
-	var scale_dmg := 1.5 * (1.0 + 0.11 * (lvl - 1))
+	var scale_dmg := 1.5 * (1.0 + 0.22 * (lvl - 1))
 	if behavior == "boss":
 		# Bosses keep pace with a geared-up hero.
 		scale_hp = 1.0 + 0.16 * (lvl - 1)
-		scale_dmg = 1.0 + 0.13 * (lvl - 1)
+		scale_dmg = 1.0 + 0.2 * (lvl - 1)
 	max_hp = int(float(data["hp"]) * scale_hp * (2.2 if elite else 1.0))
 	hp = max_hp
 	dmg = int(float(data["dmg"]) * scale_dmg * (1.3 if elite else 1.0))

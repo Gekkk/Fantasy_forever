@@ -14,6 +14,9 @@ var stats := {"attacks": 0, "casts": 0, "dashes": 0, "items": 0, "downs": 0}
 var _shot_flags := {}
 
 
+var _last_hp := -1
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	DirAccess.make_dir_recursive_absolute(shots_dir)
@@ -224,6 +227,10 @@ func _spend_points() -> void:
 func _bot_tick(prefer: Callable) -> void:
 	var p: Player = main.player
 	var s := Game.state
+	if _last_hp >= 0 and int(s["hp"]) < _last_hp:
+		stats["dmg_taken"] = int(stats.get("dmg_taken", 0)) + _last_hp - int(s["hp"])
+		stats["hits_taken"] = int(stats.get("hits_taken", 0)) + 1
+	_last_hp = int(s["hp"])
 	var pos := p.global_position
 	var hp_ratio := float(s["hp"]) / float(s["max_hp"])
 	# 1) Survive.
@@ -346,13 +353,16 @@ func controls_ok(label: String) -> void:
 
 ## A boss/arena fight; if the hero gets knocked out, heal up and retry.
 func boss_fight(start: Callable, done: Callable, label: String, tries := 3) -> void:
+	var dmg0 := int(stats.get("dmg_taken", 0))
+	var hits0 := int(stats.get("hits_taken", 0))
 	for attempt in tries:
 		var downs_before: int = stats["downs"]
 		await start.call()
 		var ok := await fight_bot(func(): return done.call() or main.world.map_id == "home_in", 240.0, label + ("" if attempt == 0 else "_retry%d" % attempt))
 		await drain_dialogs()
 		if done.call():
-			print(label, " won on attempt ", attempt + 1, " at level ", Game.state["level"], " hp ", Game.state["hp"], "/", Game.state["max_hp"])
+			print(label, " won on attempt ", attempt + 1, " at level ", Game.state["level"], " hp ", Game.state["hp"], "/", Game.state["max_hp"],
+				" damage taken ", int(stats.get("dmg_taken", 0)) - dmg0, " hits ", int(stats.get("hits_taken", 0)) - hits0)
 			return
 		if main.world.map_id == "home_in":
 			stats["downs"] = downs_before + 1
