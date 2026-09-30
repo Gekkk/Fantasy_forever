@@ -106,7 +106,7 @@ func interact(id: String) -> void:
 		"gardener": await _poppy()
 		"vending": await _vending()
 		"tower_door": await _tower_door()
-		"exit": await m.load_map("city", Vector3(15, 0, -6.9))
+		"exit": await m.load_map("city", World.DOORS["tower_door"] + Vector3(0, 0, 2.3))
 		"stairs": await _stairs()
 		"down": await m.load_map("tower", Vector3(0, 0, -6.9))
 		"ward": await _ward()
@@ -184,8 +184,9 @@ func _gremlins_done() -> void:
 
 
 # ================================================================ places
-const DOOR_SPAWNS := {"home": Vector3(-15, 0, -6.8), "cafe": Vector3(0, 0, -6.8),
-	"library": Vector3(-32, 0, -6.8), "boutique": Vector3(31, 0, -6.8)}
+## Where you appear in town after walking out of a building.
+static func door_spawn(building: String) -> Vector3:
+	return (World.DOORS[building] as Vector3) + Vector3(0, 0, 1.4)
 
 
 func _enter(map_id: String) -> void:
@@ -195,7 +196,7 @@ func _enter(map_id: String) -> void:
 
 func _leave(building: String) -> void:
 	Audio.sfx("door")
-	await m.load_map("city", DOOR_SPAWNS[building])
+	await m.load_map("city", door_spawn(building))
 
 
 func _home() -> void:

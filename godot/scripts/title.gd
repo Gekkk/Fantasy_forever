@@ -90,12 +90,34 @@ func _ready() -> void:
 		_hair_buttons.append(b)
 
 	v.add_child(UI.label("Name", 24, Color("8a6aa8")))
+	var nr := HBoxContainer.new()
+	nr.add_theme_constant_override("separation", 8)
+	v.add_child(nr)
 	_name = LineEdit.new()
 	_name.max_length = 12
 	_name.custom_minimum_size = Vector2(0, 54)
+	_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_name.add_theme_font_size_override("font_size", 28)
+	_name.placeholder_text = "Your name"
+	_name.select_all_on_focus = true
 	_name.text_submitted.connect(func(_t): _on_start())
-	v.add_child(_name)
+	nr.add_child(_name)
+	var clear := Button.new()
+	clear.text = "✕"
+	clear.custom_minimum_size = Vector2(54, 54)
+	clear.focus_mode = Control.FOCUS_NONE
+	clear.pressed.connect(func():
+		_name.text = ""
+		if _use_native_prompt():
+			_ask_name())
+	nr.add_child(clear)
+	if _use_native_prompt():
+		# Phone browsers' keyboards can't delete text in the game's own box
+		# (Backspace gets lost), so ask with the browser's native text prompt.
+		_name.editable = false
+		_name.gui_input.connect(func(e: InputEvent):
+			if (e is InputEventMouseButton and e.pressed) or (e is InputEventScreenTouch and e.pressed):
+				_ask_name())
 
 	var br := HBoxContainer.new()
 	br.add_theme_constant_override("separation", 10)
@@ -169,6 +191,20 @@ func _set_hair(i: int) -> void:
 	_hair = i
 	Audio.sfx("ui_move")
 	_sync()
+
+
+func _use_native_prompt() -> bool:
+	return OS.has_feature("web") and DisplayServer.is_touchscreen_available()
+
+
+func _ask_name() -> void:
+	var cur := _name.text.replace("\\", "").replace("'", "\\'")
+	var r = JavaScriptBridge.eval("(function(){var n = window.prompt('What is your name?', '%s'); return n === null ? '' : n;})()" % cur)
+	var n := String(r if r != null else "").strip_edges().left(12)
+	if n != "":
+		_name.text = n
+	elif _name.text == "":
+		_name.text = Game.DEFAULT_NAME
 
 
 func _on_start() -> void:

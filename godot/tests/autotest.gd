@@ -131,6 +131,16 @@ func teleport(pos: Vector3) -> void:
 	await _wait(0.3)
 
 
+func door(id: String) -> Vector3:
+	return World.DOORS[id]
+
+
+## Walks up to the tower's auto-door (it triggers when you step close).
+func enter_tower() -> void:
+	await teleport(door("tower_door") + Vector3(0, 0, 2.6))
+	await teleport(door("tower_door") + Vector3(0, 0, 0.3))
+
+
 func interact(id: String) -> void:
 	main.interact(id)
 	await _frames(2)
@@ -322,6 +332,8 @@ func _run() -> void:
 	main.title._set_robe(1)
 	main.title._set_hair(1)
 	main.title._name.text = "Luna"
+	if main.title._continue.visible:
+		main.title._on_start() # first tap only arms "start over"
 	main.title._on_start()
 	await _wait(1.5)
 	await drain_dialogs()
@@ -337,7 +349,8 @@ func _run() -> void:
 	await shot("02_city")
 
 	# Chapter 1: latte + Flame Petal.
-	await teleport(Vector3(0, 0, -6.8))
+	await teleport(door("cafe") + Vector3(0, 0, 1.3))
+	await shot("02b_main_street")
 	await interact("cafe")
 	await teleport(Vector3(-0.6, 0, -1.4))
 	await interact("bree")
@@ -348,7 +361,8 @@ func _run() -> void:
 	await drain_dialogs()
 
 	# Library: Heal Glow (and the library shard).
-	await teleport(Vector3(-32, 0, -6.8))
+	await teleport(door("library") + Vector3(0, 0, 1.4))
+	await shot("02c_north_ave")
 	await interact("library")
 	await teleport(Vector3(0, 0, -1.6))
 	await interact("hoot")
@@ -387,14 +401,13 @@ func _run() -> void:
 	check(Game.side_state("yarn") == "done", "yarn side quest turned in")
 
 	# City shards.
-	for pos in [Vector3(-23.5, 0, -12.8), Vector3(3.4, 0, 26.6)]:
+	for pos in [World.SHARD_S1, Vector3(3.4, 0, 26.6)]:
 		await teleport(pos + Vector3(1.5, 0, 0))
 		await teleport(pos)
 		await drain_dialogs(5.0)
 
 	# Chapter 3: no badge -> badge arena (two waves).
-	await teleport(Vector3(15, 0, -6.5))
-	await teleport(Vector3(15, 0, -8.8))
+	await enter_tower()
 	await _wait(0.4)
 	await drain_dialogs()
 	check(q() == 4, "quest 4 after tower door")
@@ -408,8 +421,7 @@ func _run() -> void:
 	check(not main.combat.arena_active, "arena barrier removed")
 
 	# Chapter 4: into the tower, Dot, elite gremlins.
-	await teleport(Vector3(15, 0, -6.5))
-	await teleport(Vector3(15, 0, -8.8))
+	await enter_tower()
 	await _wait(1.5)
 	await drain_dialogs()
 	check(main.world.map_id == "tower", "entered tower")
@@ -452,6 +464,11 @@ func _run() -> void:
 	while main.world.map_id != "home_in" and Time.get_ticks_msec() - t0 < 30000:
 		Game.state["hp"] = mini(int(Game.state["hp"]), 1)
 		var v := _nearest(main.player.position, Callable())
+		if v == null and main.mode == main.Mode.EXPLORE:
+			# Mochi may have cheered the last one up: bring in another.
+			main.combat.spawn_enemy("email", main.player.position + Vector3(2, 0, 0), Rect2(-10, -4, 20, 9), "", true)
+			await _frames(2)
+			continue
 		if v and main.player.position.distance_to(v.global_position) > 1.2 and main.mode == main.Mode.EXPLORE:
 			steer(v.global_position - main.player.position)
 		await _frames(2)

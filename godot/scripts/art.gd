@@ -78,6 +78,27 @@ void fragment() {
 }
 """
 
+## Additive sweep for wand slashes: UV.x runs along the arc, UV.y from the
+## inner to the outer edge. A bright head travels along the arc and leaves
+## a fading tail behind it.
+const SLASH := """
+shader_type spatial;
+render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled;
+uniform vec4 color : source_color = vec4(1.0, 0.6, 0.85, 1.0);
+uniform float progress = 0.0;
+uniform float fade = 1.0;
+void fragment() {
+	float a = UV.x;
+	float r = UV.y;
+	float tail = smoothstep(progress - 0.6, progress, a) * (1.0 - smoothstep(progress, progress + 0.04, a));
+	float body = smoothstep(0.0, 0.3, r) * (1.0 - smoothstep(0.9, 1.0, r));
+	float core = pow(r, 3.0);
+	vec3 c = mix(color.rgb, vec3(1.0, 0.99, 0.96), smoothstep(0.35, 0.9, r));
+	ALBEDO = c;
+	ALPHA = clamp(tail * body * fade * (0.85 + core * 0.6), 0.0, 1.0);
+}
+"""
+
 const TOON_ALPHA := """
 shader_type spatial;
 render_mode blend_mix, cull_disabled, depth_draw_opaque;
@@ -197,11 +218,41 @@ static func shader(code_name: String) -> Shader:
 			"toon": s.code = TOON + TOON_LIGHT
 			"toon_alpha": s.code = TOON_ALPHA + TOON_LIGHT
 			"toon_tex": s.code = TOON_TEX + TOON_LIGHT
+			"slash": s.code = SLASH
 			"ground": s.code = GROUND + TOON_LIGHT
 			"water": s.code = WATER
 			"sky": s.code = SKY
 		_shaders[code_name] = s
 	return _shaders[code_name]
+
+
+## A crescent ribbon in the XZ plane facing +Z, spanning `span` radians.
+static func slash_mesh(inner: float, outer: float, span: float) -> ArrayMesh:
+	var key := "slash|%.2f|%.2f|%.2f" % [inner, outer, span]
+	if _meshes.has(key):
+		return _meshes[key]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := 24
+	var pts: Array = []
+	for i in n + 1:
+		var t := float(i) / n
+		var ang := -span / 2.0 + span * t
+		# The ribbon is thickest in the middle and tapers to points at both ends.
+		var w := (outer - inner) * (0.25 + 0.75 * sin(PI * t))
+		var ri := outer - w
+		var d := Vector3(sin(ang), 0, cos(ang))
+		pts.append([d * ri, d * outer, t])
+	for i in n:
+		var a: Array = pts[i]
+		var b: Array = pts[i + 1]
+		for v in [[a[0], a[2], 0.0], [b[0], b[2], 0.0], [b[1], b[2], 1.0], [a[0], a[2], 0.0], [b[1], b[2], 1.0], [a[1], a[2], 1.0]]:
+			st.set_uv(Vector2(v[1], v[2]))
+			st.set_normal(Vector3.UP)
+			st.add_vertex(v[0])
+	var m := st.commit()
+	_meshes[key] = m
+	return m
 
 
 static func get_font() -> Font:

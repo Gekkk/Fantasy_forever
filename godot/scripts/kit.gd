@@ -35,6 +35,17 @@ static func parts(path: String) -> Array:
 	return out
 
 
+## Local bounding box of a prop (before scaling).
+static func bounds(path: String) -> AABB:
+	var ab := AABB()
+	var first := true
+	for p in parts(path):
+		var b: AABB = (p[1] as Transform3D) * (p[0] as Mesh).get_aabb()
+		ab = b if first else ab.merge(b)
+		first = false
+	return ab
+
+
 static func _collect(n: Node, xf: Transform3D, out: Array, is_root: bool) -> void:
 	var t := xf
 	if n is Node3D and not is_root:

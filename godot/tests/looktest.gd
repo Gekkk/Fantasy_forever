@@ -28,6 +28,25 @@ func _run() -> void:
 	var base := {}
 	for k in ["glow_enabled", "tonemap_mode", "tonemap_exposure", "ambient_light_energy", "glow_intensity", "glow_blend_mode", "adjustment_enabled"]:
 		base[k] = main.env.get(k)
+	if OS.get_environment("LOOK_TOP") != "":
+		main.set_process(false)
+		main.ui.visible = false
+		main.cam.fov = 60
+		main.cam.position = Vector3(0, 80, 2)
+		main.cam.look_at(Vector3(0, 0, -2))
+	if OS.get_environment("LOOK_SWING") != "":
+		main.player.face(Vector3(1, 0, 0.3))
+		Engine.time_scale = 0.25
+		var k := 0
+		for hit in 3:
+			main.player.attack()
+			for f in 3:
+				await get_tree().create_timer(0.06 * 0.25 * 2.0).timeout
+				get_viewport().get_texture().get_image().save_png("user://swing_%d.png" % k)
+				k += 1
+			await get_tree().create_timer(0.1).timeout
+		get_tree().quit()
+		return
 	for name in variants:
 		for k in base:
 			main.env.set(k, base[k])

@@ -260,19 +260,30 @@ func _do_hit() -> void:
 
 func _slash_fx(fwd: Vector3, big: bool) -> void:
 	var w := get_parent()
+	# A crescent that sweeps with the wand: diagonal, the other way, then a big flat finisher.
 	var arc := MeshInstance3D.new()
-	arc.mesh = Art.torus(1.1, 1.5 if not big else 1.9)
-	arc.material_override = Art.mat(Color(1.0, 0.75, 0.92, 0.55), 1.5)
-	arc.scale = Vector3(1, 0.08, 1)
-	arc.position = global_position + fwd * 0.7 + Vector3(0, 0.8, 0)
+	arc.mesh = Art.slash_mesh(0.9, 2.6 if big else 2.1, deg_to_rad(200.0 if big else 150.0))
+	var m := ShaderMaterial.new()
+	m.shader = Art.shader("slash")
+	m.set_shader_parameter("color", Color("ff4fa8") if not big else Color("a86bff"))
+	arc.material_override = m
+	arc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var roll: float = [0.45, -0.35, 0.0][_combo]
+	var flip := -1.0 if _combo == 1 else 1.0
+	arc.basis = Basis.looking_at(-fwd, Vector3.UP) * Basis(Vector3.FORWARD, roll) * Basis.from_scale(Vector3(flip, 1, 1))
+	arc.position = global_position + Vector3(0, 1.0 if not big else 0.6, 0) + fwd * 0.35
 	w.add_child(arc)
+	var dur := 0.2 if not big else 0.28
 	var tw := arc.create_tween()
-	tw.tween_property(arc, "scale", Vector3(1.4, 0.02, 1.4), 0.16)
+	tw.tween_method(func(v: float): m.set_shader_parameter("progress", v), 0.0, 1.5, dur)
+	tw.parallel().tween_method(func(v: float): m.set_shader_parameter("fade", v), 1.0, 0.0, dur).set_delay(dur * 0.45)
+	tw.parallel().tween_property(arc, "scale", arc.scale * 1.12, dur)
 	tw.tween_callback(arc.queue_free)
-	for i in 5:
-		var a := -0.9 + i * 0.45
-		var p := global_position + fwd.rotated(Vector3.UP, a) * (1.4 if not big else 1.9) + Vector3(0, 0.8, 0)
-		Art.burst(w, p, Color("fff3b0") if i % 2 else Color("ffb3d9"), 3, "sparkle", 1.2, 0.35, 0.3, Vector3.ZERO)
+	# A few sparkles fly off the tip of the swing.
+	var tip := global_position + fwd.rotated(Vector3.UP, 0.6 * flip) * (1.9 if big else 1.5) + Vector3(0, 0.8, 0)
+	Art.burst(w, tip, Color("fff3b0"), 4 if not big else 10, "sparkle", 2.0, 0.35, 0.25, Vector3.ZERO)
+	if big:
+		Art.burst(w, global_position + fwd * 1.4 + Vector3(0, 0.2, 0), Color("e0c8ff"), 12, "star", 3.0, 0.45, 0.3, Vector3.ZERO)
 
 
 func dash() -> void:

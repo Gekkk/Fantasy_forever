@@ -262,47 +262,51 @@ func _build_city() -> void:
 		"ambient": Color("c7b3f0"), "ambient_energy": 0.32, "sun_color": Color("ffd9c2"), "sun_energy": 0.8,
 		"sun_rot": Vector3(-42, -35, 0), "fog": Color("d9b8e8"), "fog_density": 0.005,
 	}
-	cam_min = Vector2(-32, -9.5)
+	cam_min = Vector2(-32, -29.5)
 	cam_max = Vector2(32, 24)
-	spawns = {"start": Vector3(-15, 0, -6.5), "home": Vector3(-15, 0, -6.8), "tower": Vector3(15, 0, -6.9),
-		"cafe": Vector3(0, 0, -6.8), "library": Vector3(-32, 0, -6.8), "boutique": Vector3(31, 0, -6.8)}
+	spawns = {"start": DOORS["home"] + Vector3(0, 0, 1.4), "home": DOORS["home"] + Vector3(0, 0, 1.4),
+		"tower": DOORS["tower_door"] + Vector3(0, 0, 2.3), "cafe": DOORS["cafe"] + Vector3(0, 0, 1.3),
+		"library": DOORS["library"] + Vector3(0, 0, 1.4), "boutique": DOORS["boutique"] + Vector3(0, 0, 1.4)}
 
 	ground_plane(Vector2(220, 180), Art.ground_mat(Color("86cf78"), Color("68b86a")), 0.0)
-	var plaza := Art.ground_mat(Color("dcb9d6"), Color("cfaacb"), 1, 1.2, Color("a98aa8"))
-	slab(Vector3(86, 0.04, 3.8), Vector3(0, 0.02, -6.2), plaza)
-	slab(Vector3(86, 0.04, 1.6), Vector3(0, 0.02, 0.6), plaza)
-	var road := Art.ground_mat(Color("857daa"), Color("766e9c"), 1, 0.9, Color("5b5480"))
-	slab(Vector3(86, 0.045, 4.2), Vector3(0, 0.022, -2.3), road)
-	var crossings := [-24, -9, 9, 24]
-	for x in range(-42, 43, 3):
-		var near := false
-		for cx in crossings:
-			if abs(x - cx) <= 2:
-				near = true
-		if not near:
-			batch.add(Art.box(Vector3(1.4, 0.02, 0.18)), Color("ffe08a"), Vector3(x, 0.05, -2.3))
-	for cx in crossings:
-		for i in 6:
-			batch.add(Art.box(Vector3(0.35, 0.02, 3.6)), Color("fbf7ff"), Vector3(cx - 1.5 + i * 0.6, 0.05, -2.3))
+	_town_streets()
 	var dirt := Art.ground_mat(Color("e0bf8c"), Color("d2ad78"), 0)
 	slab(Vector3(2.2, 0.03, 19), Vector3(-9, 0.015, 11.0), dirt)
 	slab(Vector3(2.0, 0.03, 19), Vector3(14.5, 0.015, 11.0), dirt)
-	slab(Vector3(2.0, 0.03, 13), Vector3(-24, 0.015, 8.0), dirt)
-	slab(Vector3(2.0, 0.03, 13), Vector3(24, 0.015, 8.0), dirt)
-	slab(Vector3(50, 0.03, 2.0), Vector3(0, 0.015, 14.5), dirt)
-	slab(Vector3(2.0, 0.03, 8), Vector3(1, 0.015, 25), dirt)
+	slab(Vector3(2.0, 0.03, 13), Vector3(-22, 0.015, 8.0), dirt)
+	slab(Vector3(2.0, 0.03, 13), Vector3(22, 0.015, 8.0), dirt)
+	slab(Vector3(46, 0.03, 2.0), Vector3(0, 0.015, 14.5), dirt)
+	# South of the stream: the paths cross the bridges and meet in front of the Wishing Tree.
+	slab(Vector3(25.5, 0.03, 2.0), Vector3(2.75, 0.015, 25.8), dirt)
+	slab(Vector3(2.2, 0.03, 4.2), Vector3(-9, 0.015, 23.9), dirt)
+	slab(Vector3(2.0, 0.03, 4.2), Vector3(14.5, 0.015, 23.9), dirt)
+	# Soft round caps where paths meet and turn.
+	for p in [Vector3(-9, 0, 14.5), Vector3(14.5, 0, 14.5), Vector3(-22, 0, 14.5), Vector3(22, 0, 14.5),
+			Vector3(-9, 0, 25.8), Vector3(14.5, 0, 25.8), Vector3(1, 0, 25.8)]:
+		var cap := MeshInstance3D.new()
+		cap.mesh = Art.cyl(1.35, 1.35, 0.03)
+		cap.material_override = dirt
+		cap.position = p + Vector3(0, 0.017, 0)
+		cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(cap)
 
-	_build_library(Vector3(-32, 0, -12))
-	_build_home(Vector3(-15, 0, -11))
-	_build_cafe(Vector3(0, 0, -11.5))
-	_build_spellwork(Vector3(15, 0, -13))
-	_build_boutique(Vector3(31, 0, -11))
+	# Main Street faces the park; North Avenue has the tower, library and boutique.
+	_build_home(DOORS["home"] - Vector3(0, 0, 2.8))
+	_build_cafe(DOORS["cafe"] - Vector3(0, 0, 3.4))
+	_build_library(DOORS["library"] - Vector3(0, 0, 3.8))
+	_build_spellwork(DOORS["tower_door"] - Vector3(0, 0, 3.9))
+	_build_boutique(DOORS["boutique"] - Vector3(0, 0, 2.8))
+	_town_shops()
 
 	# Street furniture
-	for x in [-36, -28, -20, -10, 0, 10, 20, 28, 36]:
-		lamp(Vector3(x + 2.5, 0, -4.6), x == 0)
+	for x in [-38, -28, -16, -6, 6, 16, 28, 38]:
+		lamp(Vector3(x, 0, -4.6), x == -6)
 	for x in [-34, -18, -4, 5, 19, 34]:
 		lamp(Vector3(x, 0, 1.3), false, Color("ffc2e0"))
+	for x in [-38, -28, -15, -6, 6, 15, 28, 38]:
+		lamp(Vector3(x, 0, -20.6), false)
+	for x in [-26, -10, 10, 26]:
+		lamp(Vector3(x, 0, -27.4), x == 10, Color("ffc2e0"))
 	var mailbox := Art.node(self, "Mailbox", Vector3(-6, 0, -5.6))
 	Art.part(mailbox, Art.cyl(0.06, 0.06, 1.0), Color("5a4a7a"), Vector3(0, 0.5, 0))
 	Art.part(mailbox, Art.box(Vector3(0.5, 0.45, 0.6)), Color("5b8def"), Vector3(0, 1.15, 0))
@@ -310,13 +314,13 @@ func _build_city() -> void:
 	Art.collider_round(self, 0.3, 1.5, Vector3(-6, 0, -5.6))
 	sign_board(Vector3(11.5, 1.9, 1.3), "Sky-Tram Stop", Color("e0f0ff"), 30)
 	batch.add(Art.cyl(0.05, 0.05, 1.7), Color("5a4a7a"), Vector3(11.5, 0.85, 1.25))
-	var vend := Art.node(self, "Vending", Vector3(-22.5, 0, -6.6))
+	var vend := Art.node(self, "Vending", Vector3(-27, 0, -6.6))
 	Art.part(vend, Art.box(Vector3(1.3, 2.2, 0.9)), Color("ff8fb8"), Vector3(0, 1.1, 0))
 	Art.part(vend, Art.box(Vector3(0.9, 1.3, 0.1)), Color("bfe8ff"), Vector3(0, 1.3, 0.45), Vector3.ZERO, Vector3.ONE, 0.6)
 	for i in 6:
 		Art.part(vend, Art.sphere(0.08), [Color("ff6b8a"), Color("7cff9a"), Color("7cc8ff")][i % 3], Vector3(-0.25 + (i % 3) * 0.25, 1.05 + int(i / 3) * 0.45, 0.5), Vector3.ZERO, Vector3.ONE, 2.0, false)
-	Art.collider(self, Vector3(1.3, 2, 0.9), Vector3(-22.5, 1, -6.6))
-	add_interactable("vending", Vector3(-22.5, 0, -5.6), 1.4, "Use the Potion Machine")
+	Art.collider(self, Vector3(1.3, 2, 0.9), Vector3(-27, 1, -6.6))
+	add_interactable("vending", Vector3(-27, 0, -5.6), 1.4, "Use the Potion Machine")
 
 	_tram = Art.node(self, "Tram", Vector3(-40, 7.5, -2.3))
 	Art.part(_tram, Art.capsule(0.9, 3.6), Color("ffd36b"), Vector3.ZERO, Vector3(0, 0, 90))
@@ -377,12 +381,12 @@ func _build_city() -> void:
 	for p in [Vector3(-19, 0, 4.5), Vector3(-36, 0, 17), Vector3(-2, 0, 5.2), Vector3(11.5, 0, 5), Vector3(20, 0, 7),
 			Vector3(35, 0, 5), Vector3(-26, 0, 5), Vector3(36, 0, 18)]:
 		tree(p, randf() < 0.5)
-	for p in [Vector3(-40, 0, -9), Vector3(-24.5, 0, -12), Vector3(-9.5, 0, -10.5), Vector3(-7, 0, -13), Vector3(6.5, 0, -11),
-			Vector3(8, 0, -13.5), Vector3(22.5, 0, -12), Vector3(40, 0, -9)]:
-		pine(p, 1.1)
-	for p in [Vector3(-18.3, 0, -8.3), Vector3(-11.7, 0, -8.3), Vector3(-4, 0, -8.2), Vector3(4, 0, -8.2),
-			Vector3(-41, 0, 2), Vector3(41, 0, 2), Vector3(-35.5, 0, -8.3), Vector3(-28.5, 0, -8.3),
-			Vector3(27.5, 0, -8.3), Vector3(34.5, 0, -8.3)]:
+	# Bushes flank every front door.
+	for id in DOORS:
+		var d: Vector3 = DOORS[id]
+		bush(d + Vector3(-2.6, 0, -0.1))
+		bush(d + Vector3(2.6, 0, -0.1))
+	for p in [Vector3(-41, 0, 2), Vector3(41, 0, 2)]:
 		bush(p)
 
 	for data in [[Vector3(-40, 14, -55), 5.0], [Vector3(10, 18, -70), 7.0], [Vector3(45, 11, -50), 4.0], [Vector3(-65, 20, -80), 8.0], [Vector3(60, 22, -85), 6.0]]:
@@ -392,12 +396,12 @@ func _build_city() -> void:
 
 	_city_dressing()
 
-	invisible_wall(Vector3(90, 4, 1), Vector3(0, 2, -15.5))
+	invisible_wall(Vector3(90, 4, 1), Vector3(0, 2, -40.0))
 	invisible_wall(Vector3(90, 4, 1), Vector3(0, 2, 30.0))
-	invisible_wall(Vector3(1, 4, 50), Vector3(-42, 2, 7))
-	invisible_wall(Vector3(1, 4, 50), Vector3(42, 2, 7))
+	invisible_wall(Vector3(1, 4, 72), Vector3(-42, 2, -5))
+	invisible_wall(Vector3(1, 4, 72), Vector3(42, 2, -5))
 
-	shard("s1", Vector3(-23.5, 0, -12.8))
+	shard("s1", SHARD_S1)
 	shard("s2", Vector3(3.4, 0, 26.6))
 
 	add_npc("pip", Models.owl(), Vector3(-7.2, 0, -5.2), 20, "Talk to Pip")
@@ -414,11 +418,11 @@ func _build_city() -> void:
 	add_npc("gardener", Models.humanoid({"robe": Color("7cc97a"), "hair": Color("c9703a"), "hair_style": "pigtails",
 		"extras": ["apron", "ears"], "accent": Color("ffd36b")}), Vector3(29, 0, 7.4), 200, "Talk to Poppy")
 
-	add_interactable("home", Vector3(-15, 0, -8.2), 1.6, "Enter Home")
-	add_interactable("cafe", Vector3(0, 0, -8.1), 1.6, "Enter the Bubbling Cauldron")
-	add_interactable("library", Vector3(-32, 0, -8.2), 1.7, "Enter the Moonlight Library")
-	add_interactable("boutique", Vector3(31, 0, -8.2), 1.7, "Enter Velour's Boutique")
-	add_interactable("tower_door", Vector3(15, 0, -9.1), 1.4, "", true)
+	add_interactable("home", DOORS["home"], 1.6, "Enter Home")
+	add_interactable("cafe", DOORS["cafe"], 1.6, "Enter the Bubbling Cauldron")
+	add_interactable("library", DOORS["library"], 1.7, "Enter the Moonlight Library")
+	add_interactable("boutique", DOORS["boutique"], 1.7, "Enter Velour's Boutique")
+	add_interactable("tower_door", DOORS["tower_door"], 1.4, "", true)
 	if Game.state["quest"] == 4:
 		spawn_badge(Vector3(-18, 0, 12))
 	_side_collectibles()
@@ -435,6 +439,120 @@ func _build_city() -> void:
 		critter_spawns.append({"id": Game.PARK_POOL.pick_random(), "pos": Vector3(randf_range(-34, 34), 0, randf_range(23.5, 27.5)), "area": meadow})
 
 
+# ============================================================ TOWN GRID
+## Front doors. Main Street (z = -2.3) faces Petal Park; North Avenue
+## (z = -24) is joined to it by Maple Lane, Market Walk and Oak Lane.
+const DOORS := {
+	"home": Vector3(-33, 0, -8.2), "cafe": Vector3(-11, 0, -8.1),
+	"library": Vector3(-33, 0, -30.2), "tower_door": Vector3(0, 0, -31.2), "boutique": Vector3(33, 0, -30.2),
+}
+const SHARD_S1 := Vector3(-28, 0, -17.2)
+const MAIN_Z := -2.3
+const NORTH_Z := -24.0
+const LANES := [-22.0, 22.0]
+const ROAD_W := 4.2
+
+
+func _town_streets() -> void:
+	var plaza := Art.ground_mat(Color("dcb9d6"), Color("cfaacb"), 1, 1.2, Color("a98aa8"))
+	var road := Art.ground_mat(Color("857daa"), Color("766e9c"), 1, 0.9, Color("5b5480"))
+	# Sidewalks
+	slab(Vector3(86, 0.04, 3.8), Vector3(0, 0.02, -6.2), plaza)
+	slab(Vector3(86, 0.04, 1.6), Vector3(0, 0.02, 0.6), plaza)
+	slab(Vector3(86, 0.04, 2.2), Vector3(0, 0.02, NORTH_Z + ROAD_W / 2 + 1.1), plaza)
+	slab(Vector3(86, 0.04, 3.8), Vector3(0, 0.02, NORTH_Z - ROAD_W / 2 - 1.9), plaza)
+	# Market Walk: a wide pedestrian street up to the tower.
+	slab(Vector3(5.0, 0.042, 12.0), Vector3(0, 0.021, -14.0), plaza)
+	slab(Vector3(8.0, 0.043, 3.0), Vector3(0, 0.022, DOORS["tower_door"].z + 1.2), plaza)
+	# Roads
+	slab(Vector3(86, 0.045, ROAD_W), Vector3(0, 0.022, MAIN_Z), road)
+	slab(Vector3(86, 0.045, ROAD_W), Vector3(0, 0.022, NORTH_Z), road)
+	var lane_len := absf(NORTH_Z - MAIN_Z) - ROAD_W
+	for x in LANES:
+		slab(Vector3(ROAD_W, 0.046, lane_len), Vector3(x, 0.023, (MAIN_Z + NORTH_Z) / 2), road)
+		# Narrow sidewalks along the lanes.
+		for sx in [-1, 1]:
+			slab(Vector3(1.2, 0.041, lane_len - 3.8), Vector3(x + sx * (ROAD_W / 2 + 0.6), 0.02, (MAIN_Z + NORTH_Z) / 2 + 0.1), plaza)
+	# Center dashes, skipping intersections.
+	var cross := LANES + [0.0]
+	for z in [MAIN_Z, NORTH_Z]:
+		for x in range(-42, 43, 3):
+			var near := false
+			for cx in cross:
+				if absf(x - cx) <= 3.0:
+					near = true
+			if not near:
+				batch.add(Art.box(Vector3(1.4, 0.02, 0.18)), Color("ffe08a"), Vector3(x, 0.05, z))
+	for x in LANES:
+		for i in 4:
+			batch.add(Art.box(Vector3(0.18, 0.02, 1.4)), Color("ffe08a"), Vector3(x, 0.05, MAIN_Z - 5.5 - i * 3.0))
+	# Zebra crossings at every corner of the grid.
+	for z in [MAIN_Z, NORTH_Z]:
+		for cx in cross:
+			var off := 3.2 if cx != 0.0 else 0.0
+			for side in ([-1, 1] if off > 0.0 else [0]):
+				for i in 6:
+					batch.add(Art.box(Vector3(0.35, 0.02, 3.6)), Color("fbf7ff"), Vector3(cx + side * off - 1.5 + i * 0.6, 0.052, z))
+	for x in LANES:
+		for z in [MAIN_Z - ROAD_W / 2 - 1.2, NORTH_Z + ROAD_W / 2 + 1.2]:
+			for i in 6:
+				batch.add(Art.box(Vector3(3.6, 0.02, 0.35)), Color("fbf7ff"), Vector3(x, 0.053, z - 1.5 + i * 0.6))
+	# Traffic lights on the lane corners.
+	for x in LANES:
+		for z in [MAIN_Z - ROAD_W / 2 - 0.4, NORTH_Z + ROAD_W / 2 + 0.4]:
+			var corner := Vector3(x + 2.6 * signf(x), 0, z)
+			batch.add_kit("city/trafficlight_A", corner, 0.0 if z > NORTH_Z else 180.0, 3.2, "~#c9b3f0")
+			Art.collider_round(self, 0.2, 2.0, corner)
+	# Street signs
+	for s in [[Vector3(-19.2, 0, -8.8), "Maple Ln", 90.0], [Vector3(19.2, 0, -8.8), "Oak Ln", -90.0],
+			[Vector3(3.0, 0, -8.6), "Market Walk", 0.0], [Vector3(-6, 0, -20.4), "North Ave", 0.0]]:
+		var p: Vector3 = s[0]
+		batch.add(Art.cyl(0.05, 0.05, 2.0), Color("5a4a7a"), p + Vector3(0, 1.0, 0))
+		sign_board(p + Vector3(0, 2.2, 0), s[1], Color("e8f4ff"), 28, s[2])
+
+
+## KayKit buildings fill the blocks between the landmarks: shops on Main
+## Street, offices on North Avenue, gardens and a little square in between.
+func _town_shops() -> void:
+	var shops := [
+		# [path, position, rotation, scale, tint, sign]
+		["city/building_B_withoutBase", Vector3(11, 0, -12.2), 0.0, 4.6, "=#ffd6e6", "Bakery"],
+		["city/building_A_withoutBase", Vector3(33, 0, -12.0), 0.0, 4.8, "=#d6e8ff", "Post Office"],
+		["city/building_E_withoutBase", Vector3(-16, 0, -34.2), 0.0, 4.2, "=#e6dcff", "Guild Hall"],
+		["city/building_G_withoutBase", Vector3(16, 0, -34.2), 0.0, 4.2, "=#fff0d6", "Apothecary"],
+	]
+	for s in shops:
+		var p: Vector3 = s[1]
+		var sc: float = s[3]
+		batch.add_kit(s[0], p, s[2], sc, s[4])
+		var foot: AABB = Kit.bounds(s[0])
+		Art.collider(self, Vector3(foot.size.x * sc, 4, foot.size.z * sc), p + Vector3(0, 2, 0))
+		sign_board(p + Vector3(0, 3.0, foot.end.z * sc + 0.15), s[5], Color("fff4e0"), 30)
+	# Back gardens between Main Street and North Avenue.
+	for x in range(-40, 41, 3):
+		if absf(x - LANES[0]) < 3.5 or absf(x - LANES[1]) < 3.5 or absi(x) < 4:
+			continue
+		batch.add_kit("medieval/fence_wood_straight", Vector3(x, 0, -19.2), 90.0, 2.6, "=#fff0f5")
+	for p in [Vector3(-38, 0, -16.5), Vector3(-30, 0, -16.8), Vector3(-15, 0, -16.5), Vector3(-7, 0, -17),
+			Vector3(8, 0, -16.8), Vector3(14, 0, -16.5), Vector3(29, 0, -16.8), Vector3(37, 0, -16.5)]:
+		if absi(int(p.x)) % 2 == 0:
+			tree(p, absi(int(p.x)) % 3 == 0, 0.9)
+		else:
+			pine(p, 0.9)
+	flower_bed(Vector3(-34, 0, -17.5), Vector2(4, 1.5), 30)
+	flower_bed(Vector3(32, 0, -17.5), Vector2(4, 1.5), 30)
+	# The little square on Market Walk: a wishing well and benches.
+	batch.add_kit("medieval/building_well_blue", Vector3(0, 0, -15.5), 0.0, 3.0, "~#e8d8ff")
+	Art.collider_round(self, 1.1, 2.0, Vector3(0, 0, -15.5))
+	bench(Vector3(-2.0, 0, -12.2), 90)
+	bench(Vector3(2.0, 0, -12.2), -90)
+	for x in [-2.0, 2.0]:
+		batch.add_kit("city/bush", Vector3(x, 0, -18.6), 0.0, 3.0)
+	# Street trees along North Avenue.
+	for x in [-36, -26, -12, 12, 26, 36]:
+		tree(Vector3(x, 0, -21.4), x % 4 == 0, 0.75)
+
+
 ## KayKit city bits and fantasy buildings: street life along the road,
 ## a pastel skyline behind the shops and a storybook countryside beyond the park.
 func _city_dressing() -> void:
@@ -442,34 +560,50 @@ func _city_dressing() -> void:
 	var cars := ["city/car_taxi", "city/car_hatchback", "city/car_sedan", "city/car_stationwagon"]
 	var car_cols := ["", "~#ffb3d1", "~#b8d8ff", "~#c9b3f0", "~#ffe0a0", "~#a8ecd0"]
 	var i := 0
-	for x in [-38.0, -30.5, -17.0, -3.0, 5.5, 17.5, 31.0, 38.5]:
-		batch.add_kit(cars[i % 4], Vector3(x, 0, -0.9), 90.0 if i % 2 == 0 else -90.0, 2.6, car_cols[i % car_cols.size()])
-		Art.collider(self, Vector3(2.5, 1.2, 1.2), Vector3(x, 0.6, -0.9))
+	var parked := []
+	for x in [-38.0, -30.5, -15.0, -6.0, 6.5, 15.0, 31.0, 38.5]:
+		parked.append(Vector3(x, 0, MAIN_Z + 1.4))
+	for x in [-36.0, -12.0, 8.0, 34.0]:
+		parked.append(Vector3(x, 0, NORTH_Z - 1.4))
+	for p in parked:
+		batch.add_kit(cars[i % 4], p, 90.0 if i % 2 == 0 else -90.0, 2.6, car_cols[i % car_cols.size()])
+		Art.collider(self, Vector3(2.5, 1.2, 1.2), p + Vector3(0, 0.6, 0))
 		i += 1
 	for x in [-26.5, -12.5, 12.5, 26.5]:
 		batch.add_kit("city/firehydrant", Vector3(x, 0, -4.5), 0.0, 3.0, "=#ff9fb8")
+		batch.add_kit("city/firehydrant", Vector3(x + 3.0, 0, NORTH_Z - 2.6), 0.0, 3.0, "=#ff9fb8")
 	for x in [-33.0, -7.5, 7.5, 21.5]:
 		batch.add_kit("city/trash_A", Vector3(x, 0, 1.0), 0.0, 3.2, "=#c9b3f0")
+	for x in [-18.0, 18.0]:
+		batch.add_kit("city/dumpster", Vector3(x, 0, -17.5), 0.0, 3.0, "=#a8d8c0")
+		Art.collider(self, Vector3(1.8, 1.2, 1.1), Vector3(x, 0.6, -17.5))
 	# Skyline: pastel office towers behind the shop row (people still work 9 to 5!).
 	var towers := ["city/building_C_withoutBase", "city/building_D_withoutBase", "city/building_H_withoutBase",
 		"city/building_F_withoutBase", "city/building_G_withoutBase", "city/building_E_withoutBase"]
 	var tints := ["=#e8d8ff", "=#ffd8e8", "=#d8ecff", "=#fff0d8", "=#e0f5e8"]
 	i = 0
 	for x in range(-52, 53, 7):
-		var z := -24.0 - float((i * 5) % 3) * 3.0
+		var z := -46.0 - float((i * 5) % 3) * 3.0
 		batch.add_kit(towers[i % towers.size()], Vector3(x, -0.3, z), float((i % 2) * 180), 4.2 + float(i % 3) * 0.6, tints[i % tints.size()])
 		i += 1
-	batch.add_kit("city/watertower", Vector3(-45, 0, -19), 0.0, 5.0, "=#c9b3f0")
+	batch.add_kit("city/watertower", Vector3(-46, 0, -42), 0.0, 5.0, "=#c9b3f0")
 	# Storybook countryside past the park.
 	batch.add_kit("medieval/building_windmill_blue", Vector3(-30, 0, 40), 30.0, 6.0)
 	batch.add_kit("medieval/building_church_blue", Vector3(8, 0, 44), 0.0, 6.0)
 	batch.add_kit("medieval/building_tower_A_blue", Vector3(34, 0, 41), -20.0, 5.5)
 	batch.add_kit("medieval/building_home_A_blue", Vector3(-12, 0, 38), 15.0, 5.0)
 	batch.add_kit("medieval/building_tavern_blue", Vector3(22, 0, 37), -10.0, 5.0)
-	for p in [Vector3(-45, 0, 36), Vector3(-2, 0, 36), Vector3(46, 0, 35), Vector3(-22, 0, 47), Vector3(28, 0, 50)]:
-		batch.add_kit("nature/hills_A_trees", p, p.x * 3.0, 6.0)
-	for p in [Vector3(-55, 0, 25), Vector3(55, 0, 22), Vector3(-60, 0, 5), Vector3(60, 0, 8)]:
-		batch.add_kit("nature/mountain_A_grass_trees", p, p.x, 9.0)
+	# A soft forest frames the park on three sides.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for k in 90:
+		var p: Vector3
+		match k % 3:
+			0: p = Vector3(rng.randf_range(-58, -45), 0, rng.randf_range(-40, 40))
+			1: p = Vector3(rng.randf_range(45, 58), 0, rng.randf_range(-40, 40))
+			_: p = Vector3(rng.randf_range(-50, 50), 0, rng.randf_range(31.5, 34))
+		var v: String = ["", "", "mint", "blossom", "autumn"][rng.randi() % 5]
+		batch.add_kit("nature/tree_single_A" if rng.randf() < 0.6 else "nature/tree_single_B", p, rng.randf() * 360.0, rng.randf_range(2.6, 4.0), v)
 	# A little flower market in the park.
 	for data in [[Vector3(-27.5, 0, 2.6), "flag_red"], [Vector3(-30.5, 0, 2.6), "flag_blue"]]:
 		batch.add_kit("medieval/tent", data[0], 0.0, 4.0, "=#ffc2e0" if data[1] == "flag_red" else "=#c9e0ff")
