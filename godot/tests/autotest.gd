@@ -457,8 +457,8 @@ func _run() -> void:
 
 	# A defeat on purpose: you must wake up at home, healed, able to move.
 	# Leash the attacker to wherever we are standing so it can always reach us.
-	for e in _live_enemies():
-		e._die()
+	for old in _live_enemies():
+		old._die()
 	var here: Vector3 = main.player.position
 	main.combat.spawn_enemy("email", here + Vector3(2, 0, 0), Rect2(here.x - 6, here.z - 6, 12, 12), "", true)
 	Game.state["hp"] = 1
